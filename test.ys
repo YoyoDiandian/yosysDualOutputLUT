@@ -1,0 +1,11 @@
+read_aiger tests/aig/i2c.aig
+# read_aiger sm4_comb.aag
+# read_verilog original.v
+proc; opt; techmap; opt;
+hierarchy -check -auto-top
+# write_verilog original.v
+# logger -debug
+lut6d_map
+clean
+stat
+write_verilog mapped.v
