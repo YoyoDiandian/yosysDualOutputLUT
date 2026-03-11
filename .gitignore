@@ -65,3 +65,4 @@ test_output*/
 aig_statistics/
 backup/
 .git-abc-submodule-hash
+pango*/

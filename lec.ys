@@ -3,14 +3,17 @@
 read_verilog -icells techlibs/yoyo/cells_sim.v
 read_verilog -lib -nooverwrite techlibs/yoyo/cells_lib.v
 # 读取映射后的设计
-read_verilog mapped.v
+read_verilog mapped_tc1.v
 hierarchy -check -auto-top
 flatten
 design -stash after_map
 
 # 读取映射前的设计
 # read_verilog original.v
-read_aiger ./tests/aig/i2c.aig
+# read_aiger ./tests/aig/i2c.aig
+# 注意：test.ys 使用 input.blif（I0/O0 端口命名），
+# 因此这里也用同一个源文件，避免端口名不匹配导致 equiv_make 失败。
+read_blif tests/tc_public/tc_public_1/input.blif
 hierarchy -check -auto-top
 flatten
 design -stash before_map
