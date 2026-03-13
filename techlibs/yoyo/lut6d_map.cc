@@ -7,8 +7,6 @@
 #include <limits>
 #include <numeric>
 #include <queue>
-#include <ranges>
-#include <string.h>
 
 USING_YOSYS_NAMESPACE
 using namespace std;
@@ -17,7 +15,6 @@ PRIVATE_NAMESPACE_BEGIN
 // 全局配置参数
 int LUT_SIZE = 6;              // K-可行性约束：最大输入数量
 static int MAX_CUTS_PER_NODE = 64;    // 每个节点保留的最大割集数量（ABC风格：增加到64）
-static int NUM_PATTERNS = 128;         // LUT映射中使用的预计算模式数量
 static int MAPPING_ROUNDS = 4;        // ABC风格：多轮迭代优化
 static int MAX_PAIRS_PER_NODE = 32;   // 每个节点最多评估的双输出配对数量
 static int MAX_DISJOINT_PAIRS_PER_NODE = 24; // 每节点保留的”无共享输入”配对上限
@@ -38,7 +35,6 @@ static int POSTPACK_PASS2_SCAN_WINDOW = 0; // 第二轮后处理配对扫描窗�
 static int POSTPACK_PASS2_MAX_CHUNKS = 1; // 第二轮后处理最多处理的候选分块数
 static float EPSILON = 0.005f;        // 浮点比较精度
 static int layer_invalid_log_count = 0;
-static bool ENABLE_DEPENDENCY_CHECK = false; // 依赖检查较贵，默认关闭
 
 struct Cut;
 Cut MergeCuts(const Cut &cut1, const Cut &cut2);
@@ -56,7 +52,6 @@ static size_t DualLutInitWidth(size_t input_count)
 SigMap sigmap;
 dict<SigBit, Cell *> bit2driver;
 dict<SigBit, vector<Cell *>> bit2reader;
-dict<SigBit, vector<State>> bit2states;
 dict<Cell*, vector<SigBit>> cell2bits;
 dict<Cell*, vector<Cut>> cell2cuts;  // 每个节点的割集列表
 dict<Cell*, size_t> cell2depth;  // 节点深度（level）
@@ -66,14 +61,10 @@ dict<Cell*, float> cell2required;  // 节点的required time
 dict<Cell*, Cut> cell2bestcut;
 dict<Cell*, vector<const Cut*>> layer_candidate_cut_cache; // 缓存层覆盖阶段候选cut
 dict<Cell*, int> cell2index;
-static dict<Cell*, int> orig_fanout;
-static bool fanout_ready = false;
 pool<Cell*> processed_nodes;
 pool<Cell*> used_nodes;
 pool<SigBit> prime_outputs;
 pool<SigBit> prime_inputs;
-pool<SigBit> protected_signals;  // 受保护的信号：这些信号的驱动节点不能被删除
-pool<SigBit> used_lut_inputs;    // 所有LUT输入信号（用于保护驱动）
 pool<SigBit> mapped_lut_outputs; // 所有LUT输出信号（需要替换驱动）
 
 // ABC风格：估计引用计数和精确引用计数
@@ -449,19 +440,6 @@ bool IsCombinationalGate(Cell *cell) {
     return cell->type.in(ID($_AND_), ID($_NOT_), ID($and), ID($not), ID($lut));
 }
 
-void GetCellInputsSet(Cell *cell, pool<SigBit> &inputs)
-{
-	log_assert(cell && inputs.empty() && cell2bits.count(cell));
-	auto &bits = cell2bits[cell];
-	int offset = 1;
-	// not support GTP_LUT6D now
-	// if(cell is dual output)
-	// offset=2
-	for (auto it = bits.begin() + offset; it != bits.end(); ++it) {
-		inputs.insert(*it);
-	}
-}
-
 void GetCellInputsVector(Cell *cell, vector<SigBit> &inputs)
 {
 	log_assert(cell && inputs.empty() && cell2bits.count(cell));
@@ -556,12 +534,9 @@ bool GetPrimeInputOutput(Module *module, pool<SigBit> &inputs, pool<SigBit> &out
 	return true;
 }
 
-void GetTopoSortedGates(Module *module, vector<Cell *> &gates) {
+void GetTopoSortedGates(vector<Cell *> &gates) {
     gates.clear();
     int i = 0;
-    pool<SigBit> prime_inputs;
-    pool<SigBit> prime_outputs;
-    GetPrimeInputOutput(module, prime_inputs, prime_outputs);
 	cell2level.clear();  // 清空level映射
 	dict<Cell *, size_t> indegree;
 	pool<Cell *> visited;
@@ -643,162 +618,6 @@ void GetTopoSortedGates(Module *module, vector<Cell *> &gates) {
 	}
 }
 
-static void BuildOrigFanout()
-{
-    orig_fanout.clear();
-    for (auto &kv : cell2bits) {
-        Cell *c = kv.first;
-        if (!IsCombinationalGate(c)) continue;
-        vector<SigBit> inbits; GetCellInputsVector(c, inbits);
-        for (auto &b : inbits) {
-            Cell *drv = bit2driver.count(b) ? bit2driver[b] : nullptr;
-            if (drv && IsCombinationalGate(drv)) orig_fanout[drv]++;
-        }
-    }
-    fanout_ready = true;
-}
-
-static void YS_MAYBE_UNUSED ComputeMFFC(Cell *root, pool<Cell*> &mffc)
-{
-    mffc.clear();
-    if (!root || !IsCombinationalGate(root)) return;
-    if (!fanout_ready) BuildOrigFanout();
-
-    // 创建局部fanout计数的副本
-    dict<Cell*, int> local_fanout;
-    for (auto &kv : orig_fanout) {
-        local_fanout[kv.first] = kv.second;
-    }
-
-    // 从root开始递归地添加节点到MFFC
-    vector<Cell*> stack;
-    stack.push_back(root);
-    
-    while (!stack.empty()) {
-        Cell *c = stack.back();
-        stack.pop_back();
-        
-        if (!c || !IsCombinationalGate(c) || mffc.count(c)) 
-            continue;
-        
-        // 将当前节点加入MFFC
-        mffc.insert(c);
-        
-        // 获取当前节点的所有输入
-        vector<SigBit> inbits;
-        GetCellInputsVector(c, inbits);
-        
-        for (auto &b : inbits) {
-            Cell *drv = bit2driver.count(b) ? bit2driver[b] : nullptr;
-            if (!drv || !IsCombinationalGate(drv) || mffc.count(drv)) 
-                continue;
-            
-            // 获取驱动节点的fanout计数
-            int fanout = local_fanout.count(drv) ? local_fanout[drv] : 0;
-            
-            // 只有当驱动节点的fanout为1（只被当前节点使用）时，才加入MFFC
-            if (fanout == 1) {
-                stack.push_back(drv);
-            }
-            
-            // 递减驱动节点的fanout计数（因为当前节点已加入MFFC）
-            if (fanout > 0) {
-                local_fanout[drv] = fanout - 1;
-            }
-        }
-    }
-}
-
-bool YS_MAYBE_UNUSED ComputeSharedMFFC(Cell *nodeshallow, Cell *nodedeep, pool<Cell*> &shared_mffc, Cell* reader, pool<Cell*> &visited, size_t max_depth, size_t min_depth) {
-    // 优化：限制MFFC搜索，避免过深递归
-    if (!IsCombinationalGate(reader)) return false;
-    
-    // Early termination: 如果visited集合过大，停止搜索
-    if (visited.size() > 100) return false;
-    
-    if (visited.count(reader)) {
-        if (shared_mffc.count(reader)) return true;
-        // {
-        //     log_debug("      visited node in shared mffc: %s\n", reader->name.c_str());
-        //     return true;
-        // }
-        else return false;
-        // {
-        //     log_debug("      visited node not in shared mffc: %s\n", reader->name.c_str());
-        //     return false;
-        // }
-    }
-    visited.insert(reader);
-    if (cell2level[reader] > max_depth) return false;
-    // {
-        // log_debug("      Node beyond max depth: %s\n", reader->name.c_str());
-    //     return false;
-    // }
-
-    if (nodeshallow == reader || nodedeep == reader) return true;
-    // {
-    //     log_debug("      Reached root node: %s\n", reader->name.c_str());
-    //     return true;
-    // }
-
-    if ((cell2level[reader] == max_depth && reader != nodedeep)) return false;
-    // {
-    //     log_debug("      Shared MFFC stop node: %s\n", reader->name.c_str());
-    //     return false;
-    // }
-
-    // Only check output bit (index 0), not input bits
-    SigBit output_bit = cell2bits[reader][0];
-    // log_debug("      Checking output bit of node %s: %s\n", reader->name.c_str(), log_signal(output_bit));
-    if (prime_outputs.count(output_bit)) return false;
-    // {
-    //     log_debug("      Output bit is in PO, stopping: %s\n", log_signal(output_bit));
-    //     return false;
-    // }
-
-    vector<Cell *> outputs = bit2reader.count(output_bit) ? bit2reader[output_bit] : vector<Cell *>();
-    for (Cell *output : outputs) {
-        // log_debug("      Checking output node: %s of %s\n", output->name.c_str(), reader->name.c_str());
-        if (!ComputeSharedMFFC(nodeshallow, nodedeep, shared_mffc, output, visited, max_depth, min_depth)) {
-            // log_debug("      Shared MFFC transfer node: %s\n", reader->name.c_str());
-            return false;
-        }
-    }
-    shared_mffc.insert(reader);
-    // log_debug("      Shared MFFC node: %s\n", reader->name.c_str());
-    return true;
-}
-
-void YS_MAYBE_UNUSED ComputeSharedMFFCEngine(Cell *node1, Cell *node2, pool<Cell*> &shared_mffc, const pool<SigBit> &leaves) {
-    pool<Cell*> visited;
-    size_t max_depth = max(cell2level[node1], cell2level[node2]);
-    size_t min_depth = min(cell2level[node1], cell2level[node2]);
-    shared_mffc.clear();
-    shared_mffc.insert(node1);
-    shared_mffc.insert(node2);
-    visited.insert(node1);
-    visited.insert(node2);
-    Cell* nodeshallow = (cell2level[node1] < cell2level[node2]) ? node1 : node2;
-    Cell* nodedeep = (cell2level[node1] < cell2level[node2]) ? node2 : node1;
-    // log_debug("    Compute Shared MFFC between %s (depth %zu) and %s (depth %zu)\n",
-    //           node1->name.c_str(), cell2level[node1],
-    //           node2->name.c_str(), cell2level[node2]);
-              
-    for (SigBit leaf : leaves) {
-        vector<Cell *> readers = bit2reader[leaf];
-        for (Cell *reader : readers) {
-            if (!IsCombinationalGate(reader)) continue;
-            if (visited.count(reader)) continue;
-            if (cell2level[reader] > max_depth) continue;
-
-            if (reader == node1 || reader == node2) {
-                continue;
-            }
-            ComputeSharedMFFC(nodeshallow, nodedeep, shared_mffc, reader, visited, max_depth, min_depth);
-        }
-    }
-}
-
 // 优化：添加缓存避免重复计算
 State StateEval(dict<SigBit, State> &bit_map, SigBit out)
 {
@@ -875,79 +694,6 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
 		log_error("unhandled cell %s \n", cell->type.c_str());
 	}
 	return State::Sx;
-}
-
-void partialSimulator(const pool<SigBit> &seed_inputs) {
-    for (SigBit bit : seed_inputs) {
-        vector<State> states;
-        states.reserve(NUM_PATTERNS);
-        for (int i = 0; i < NUM_PATTERNS; i++) {
-            State random_state = (rand() % 2 == 0) ? State::S0 : State::S1;
-            states.push_back(random_state);
-        }
-        bit2states[bit] = states;
-    }
-}
-
-static void YS_MAYBE_UNUSED GenerateBitState(Module *module, const pool<SigBit> &prime_inputs,
-                                             bool incremental, vector<Cell *> gates) {
-    (void)module;
-    // Only clear if not incremental update
-    if (!incremental) {
-        bit2states.clear();
-    }
-
-    partialSimulator(prime_inputs);
-	
-	// 得到部分真值表
-
-	for (Cell *cell : gates) {
-		if (!IsCombinationalGate(cell)) {
-			continue;
-		}
-		
-		SigBit output = GetCellOutput(cell);
-        vector<State> output_states;
-        output_states.reserve(NUM_PATTERNS);
-
-		pool<SigBit> inputs;
-		GetCellInputsSet(cell, inputs);
-		
-		// int num_of_zero = 0;
-		// int num_of_one = 0;
-
-        for (int i = 0; i < NUM_PATTERNS; i++) {
-			dict<SigBit, State> bit_map;
-			
-			for (SigBit input_bit : inputs) {
-				if (bit2states.count(input_bit) && bit2states[input_bit].size() > (size_t)i) {
-					bit_map[input_bit] = bit2states[input_bit][i];
-				}
-			}
-			
-            State output_state = StateEval(bit_map, output);
-			output_states.push_back(output_state);
-			
-			// if (output_state == State::S0) {
-			// 	num_of_zero++;
-			// } else if (output_state == State::S1) {
-			// 	num_of_one++;
-			// }
-		}
-		
-		// 检查0和1的数量是否都大于5
-		// if (num_of_zero > 5 && num_of_one > 5) {
-		// 	log("Cell %s output has balanced states: %d zeros, %d ones\n", 
-		// 		cell->name.c_str(), num_of_zero, num_of_one);
-		// }
-		// else {
-		// 	log("Cell %s output has unbalanced states: %d zeros, %d ones\n", 
-		// 		cell->name.c_str(), num_of_zero, num_of_one);
-		// }
-        bit2states[output] = output_states;
-        
-        string sig_name = log_signal(output);
-	}
 }
 
 bool CheckCellWidth(Module *module)
@@ -1030,8 +776,6 @@ double ComputeAreaFlowABC(const pool<SigBit>& leaves) {
             refs = (float)cell2refs[leaf];
         } else if (cell2est_refs.count(leaf)) {
             refs = max(1.0f, cell2est_refs[leaf]);
-        } else if (orig_fanout.count(leaf)) {
-            refs = max(1.0f, (float)orig_fanout[leaf]);
         }
         
         flow += leaf_flow / refs;
@@ -1491,52 +1235,6 @@ void GenerateCutsForNode(Cell *node, vector<Cut> &cuts) {
     }
     
     return;
-}
-
-// 检查cut的leaves之间是否存在依赖关系
-// 返回true表示存在依赖（不合法），false表示独立（合法）
-bool HasDependencyInCutLeaves(const Cut& merged_cut) {
-    // 将leaves转换为set以便快速查找
-    pool<SigBit> leaves_set(merged_cut.leaves.begin(), merged_cut.leaves.end());
-    
-    // 对于每个leaf，使用BFS检查它的TFI（transitive fanin）是否包含其他leaf
-    for (auto leaf : merged_cut.leaves) {
-        Cell* driver = bit2driver.count(leaf) ? bit2driver[leaf] : nullptr;
-        if (!driver || !IsCombinationalGate(driver)) continue;
-        
-        // 使用BFS遍历leaf的TFI（向后追溯）
-        pool<Cell*> visited;
-        vector<Cell*> queue;
-        queue.push_back(driver);
-        visited.insert(driver);
-        
-        while (!queue.empty()) {
-            Cell* current = queue.back();
-            queue.pop_back();
-            
-            // 获取当前节点的输入
-            vector<SigBit> inputs;
-            GetCellInputsVector(current, inputs);
-            
-            for (auto input : inputs) {
-                // 检查input是否是cut的其他leaf
-                if (leaves_set.count(input) && input != leaf) {
-                    // log_debug("      Dependency detected: %s transitively depends on %s\n",
-                    //          log_signal(leaf), log_signal(input));
-                    return true;
-                }
-                
-                // 继续向上追溯input的驱动
-                Cell* input_driver = bit2driver.count(input) ? bit2driver[input] : nullptr;
-                if (input_driver && IsCombinationalGate(input_driver) && !visited.count(input_driver)) {
-                    visited.insert(input_driver);
-                    queue.push_back(input_driver);
-                }
-            }
-        }
-    }
-    
-    return false;
 }
 
 // 检查是否满足Z5=Z在I5=0时的cofactor关系
@@ -2275,9 +1973,6 @@ static void GenerateDualCandidatesForNode(Cell* node, const pool<SigBit>& curren
                 if (merged.leaves.size() > size_t(LUT_SIZE)) continue;
                 if (merged.leaves.count(node_output) || merged.leaves.count(cand_output)) continue;
                 
-                // 检查叶子之间的依赖关系
-                if (ENABLE_DEPENDENCY_CHECK && HasDependencyInCutLeaves(merged)) continue;
-
                 // 估计双输出相对“两个单输出”的面积收益，收益不足则直接剪枝
                 double single_area = node_cut->area_flow + cand_cut->area_flow;
                 double area_gain = single_area - merged.area_flow;
@@ -2782,10 +2477,9 @@ void LayerBasedCoveringMain(Module* module, vector<Cell*>& gates,
         total_dual, total_single, total_dual + total_single);
 }
 
-static void BuildBestCutSingleCover(Module *module, const vector<Cell *> &gates,
+static void BuildBestCutSingleCover(const vector<Cell *> &gates,
                                     vector<SingleLUTInfo> &single_luts)
 {
-    (void)module;
     single_luts.clear();
     for (Cell *node : gates) {
         if (!node || !IsCombinationalGate(node))
@@ -2801,6 +2495,42 @@ static void BuildBestCutSingleCover(Module *module, const vector<Cell *> &gates,
         if (BuildSingleLUTFromCut(node, *best_cut, single_lut))
             single_luts.push_back(single_lut);
     }
+}
+
+struct PostPackEntry {
+    size_t idx;
+    size_t real_inputs;
+    pool<SigBit> leaves;
+    uint64_t signature;
+};
+
+static void BuildPostPackEntries(const vector<SingleLUTInfo> &single_luts,
+                                 vector<PostPackEntry> &entries)
+{
+    entries.clear();
+    entries.reserve(single_luts.size());
+    for (size_t i = 0; i < single_luts.size(); i++) {
+        PostPackEntry entry;
+        entry.idx = i;
+        entry.real_inputs = 0;
+        entry.signature = 0;
+        for (auto inp : single_luts[i].inputs) {
+            if (inp.wire == nullptr)
+                continue;
+            entry.real_inputs++;
+            entry.leaves.insert(inp);
+            size_t h = hashlib::legacy::djb2_add(inp.wire->name.index_, inp.offset);
+            entry.signature |= (1ULL << (h % 64));
+        }
+        entries.push_back(std::move(entry));
+    }
+
+    sort(entries.begin(), entries.end(),
+         [](const PostPackEntry &a, const PostPackEntry &b) {
+             if (a.real_inputs != b.real_inputs)
+                 return a.real_inputs < b.real_inputs;
+             return a.idx < b.idx;
+         });
 }
 
 static void CountModuleMappingCells(Module *module, size_t &aig_cells,
@@ -2848,46 +2578,13 @@ static void MaybePreMapAigWithAbc(Design *design, Module *module)
 }
 
 // 后处理：将剩余的单输出LUT配对打包为双输出LUT6D
-static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
-                               vector<LUT6DInfo> &dual_luts,
+static void PostPackSingleLUTs(vector<LUT6DInfo> &dual_luts,
                                vector<SingleLUTInfo> &single_luts)
 {
-    (void)module;
-    (void)gates;
     if (single_luts.size() < 2) return;
 
-    // 统计每个single LUT的真实wire输入
-    struct PackEntry {
-        size_t idx;
-        size_t real_inputs;
-        pool<SigBit> leaves;
-        uint64_t signature;  // 快速过滤
-    };
-    vector<PackEntry> entries;
-    entries.reserve(single_luts.size());
-    for (size_t i = 0; i < single_luts.size(); i++) {
-        PackEntry e;
-        e.idx = i;
-        e.real_inputs = 0;
-        e.signature = 0;
-        for (auto &inp : single_luts[i].inputs) {
-            if (inp.wire != nullptr) {
-                e.real_inputs++;
-                e.leaves.insert(inp);
-                size_t h = hashlib::legacy::djb2_add(inp.wire->name.index_, inp.offset);
-                e.signature |= (1ULL << (h % 64));
-            }
-        }
-        entries.push_back(std::move(e));
-    }
-
-    // 按真实输入数升序排列（小的优先配对）
-    sort(entries.begin(), entries.end(),
-         [&](const PackEntry &a, const PackEntry &b) {
-             if (a.real_inputs != b.real_inputs)
-                 return a.real_inputs < b.real_inputs;
-             return a.idx < b.idx;
-         });
+    vector<PostPackEntry> entries;
+    BuildPostPackEntries(single_luts, entries);
 
     pool<size_t> consumed;
     size_t packed = 0;
@@ -3013,28 +2710,8 @@ static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
     if (single_luts.size() < 2) return;
 
     // 重新构建entries
-    entries.clear();
     consumed.clear();
-    for (size_t i = 0; i < single_luts.size(); i++) {
-        PackEntry e;
-        e.idx = i;
-        e.real_inputs = 0;
-        e.signature = 0;
-        for (auto &inp : single_luts[i].inputs) {
-            if (inp.wire != nullptr) {
-                e.real_inputs++;
-                e.leaves.insert(inp);
-                size_t h = hashlib::legacy::djb2_add(inp.wire->name.index_, inp.offset);
-                e.signature |= (1ULL << (h % 64));
-            }
-        }
-        entries.push_back(std::move(e));
-    }
-    sort(entries.begin(), entries.end(),
-         [&](const PackEntry &a, const PackEntry &b) {
-             if (a.real_inputs != b.real_inputs) return a.real_inputs < b.real_inputs;
-             return a.idx < b.idx;
-         });
+    BuildPostPackEntries(single_luts, entries);
 
     // 对超大集合做分块：每块限制规模，避免一次性O(N^2)爆炸；
     // 通过多块覆盖提升大型网络（如hyp）的剩余可配对机会。
@@ -3548,26 +3225,6 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     // Phase 3: bit-level随机仿真目前不参与映射决策，跳过以提升稳定性和速度
     log("\nPhase 3: Skipping non-decision bit-state simulation...\n");
 
-    // 预先计算所有受保护的信号：所有节点的best_cut的leaves
-    // 这些信号的驱动节点不能被删除，因为它们会被LUT使用
-    log("\nPre-computing protected signals (all best cut leaves)...\n");
-    protected_signals.clear();
-    for (Cell* node : gates) {
-        if (!IsCombinationalGate(node)) continue;
-        const Cut* best_cut = nullptr;
-        if (cell2bestcut.count(node)) {
-            best_cut = &cell2bestcut[node];
-        } else if (cell2cuts.count(node) && !cell2cuts[node].empty()) {
-            best_cut = &cell2cuts[node][0];
-        }
-        if (best_cut) {
-            for (auto bit : best_cut->leaves) {
-                protected_signals.insert(bit);
-            }
-        }
-    }
-    log("  Total protected signals: %zu\n", protected_signals.size());
-
     vector<LUT6DInfo> lut_infos;
     vector<SingleLUTInfo> single_luts;
     vector<LUT6DInfo> lut_infos_dual_mode;
@@ -3623,16 +3280,16 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
 
     // Mode 3: 纯单输出覆盖
     log("\n=== Covering Mode 3: Best-cut single-output ===\n");
-    BuildBestCutSingleCover(module, gates, single_luts_bestcut_mode);
+    BuildBestCutSingleCover(gates, single_luts_bestcut_mode);
 
     // 对所有模式执行后处理打包
     if (run_layer_modes)
-        PostPackSingleLUTs(module, gates, lut_infos_dual_mode, single_luts_dual_mode);
+        PostPackSingleLUTs(lut_infos_dual_mode, single_luts_dual_mode);
     if (run_extra_modes) {
-        PostPackSingleLUTs(module, gates, lut_infos_disjoint_mode, single_luts_disjoint_mode);
+        PostPackSingleLUTs(lut_infos_disjoint_mode, single_luts_disjoint_mode);
     }
     vector<LUT6DInfo> dual_from_bestcut;
-    PostPackSingleLUTs(module, gates, dual_from_bestcut, single_luts_bestcut_mode);
+    PostPackSingleLUTs(dual_from_bestcut, single_luts_bestcut_mode);
 
     // 比较所有模式的总LUT数，选最优
     size_t total_mode1 = run_layer_modes
@@ -3666,7 +3323,6 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
         total_mode3, picked_name, best_total);
     
     // 先添加所有LUT，再基于实际输出删除原节点
-    used_lut_inputs.clear();
     mapped_lut_outputs.clear();
     log("\nTotal LUT6D cells to be added: %zu\n", lut_infos.size());
     for (auto lut_info : lut_infos) {
@@ -3730,7 +3386,6 @@ void CleanupGlobalDataStructures()
     sigmap.clear();
     bit2driver.clear();
     bit2reader.clear();
-    bit2states.clear();
     cell2bits.clear();
     cell2cuts.clear();
     cell2depth.clear();
@@ -3740,19 +3395,13 @@ void CleanupGlobalDataStructures()
     cell2bestcut.clear();
     layer_candidate_cut_cache.clear();
     cell2index.clear();
-    orig_fanout.clear();
     processed_nodes.clear();
     used_nodes.clear();
     prime_outputs.clear();
     prime_inputs.clear();
-    protected_signals.clear();  // 清理受保护信号集合
-    used_lut_inputs.clear();
     mapped_lut_outputs.clear();
     cell2est_refs.clear();   // ABC风格：清理估计引用计数
     cell2refs.clear();       // ABC风格：清理实际引用计数
-    
-    // 重置fanout标志
-    fanout_ready = false;
     
     log("Memory cleanup complete.\n");
 }
@@ -3763,7 +3412,7 @@ void LUT6DMapperMain(Module *module)
     CleanupGlobalDataStructures();  
     vector<Cell *> gates;
     CheckCellWidth(module);
-    GetTopoSortedGates(module, gates);
+    GetTopoSortedGates(gates);
     LUT6DMapping(module, gates);
     CleanupGlobalDataStructures();
 }

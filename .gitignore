@@ -66,3 +66,4 @@ aig_statistics/
 backup/
 .git-abc-submodule-hash
 pango*/
+backup/
