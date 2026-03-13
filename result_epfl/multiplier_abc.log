@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/multiplier.aig; ps; if -K 6; ps; write_verilog test_output_epfl/multiplier_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/multiplier:[0m i/o =  128/  128  lat =    0  and =  27062  lev =274
+[1;37m/Users/yoyowang/Desktop/benchmark/multiplier:[0m i/o =  128/  128  lat =    0  nd =  5929  edge =  27739  aig  = 45570  lev = 53

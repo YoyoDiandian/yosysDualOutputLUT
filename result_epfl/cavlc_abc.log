@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/cavlc.aig; ps; if -K 6; ps; write_verilog test_output_epfl/cavlc_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/cavlc:[0m i/o =   10/   11  lat =    0  and =    693  lev = 16
+[1;37m/Users/yoyowang/Desktop/benchmark/cavlc:[0m i/o =   10/   11  lat =    0  nd =   122  edge =    628  aig  =   969  lev = 4

@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/router.aig; ps; if -K 6; ps; write_verilog test_output_epfl/router_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/router:[0m i/o =   60/   30  lat =    0  and =    257  lev = 54
+[1;37m/Users/yoyowang/Desktop/benchmark/router:[0m i/o =   60/   30  lat =    0  nd =    91  edge =    306  aig  =   394  lev = 11

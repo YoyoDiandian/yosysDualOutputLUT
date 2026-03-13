@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/bar.aig; ps; if -K 6; ps; write_verilog test_output_epfl/bar_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/bar:[0m i/o =  135/  128  lat =    0  and =   3336  lev = 12
+[1;37m/Users/yoyowang/Desktop/benchmark/bar:[0m i/o =  135/  128  lat =    0  nd =   512  edge =   2688  aig  =  4608  lev = 4

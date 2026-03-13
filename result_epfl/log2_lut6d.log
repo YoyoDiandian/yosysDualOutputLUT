@@ -1,0 +1,540 @@
+
+ /----------------------------------------------------------------------------\
+ |  yosys -- Yosys Open SYnthesis Suite                                       |
+ |  Copyright (C) 2012 - 2025  Claire Xenia Wolf <claire@yosyshq.com>         |
+ |  Distributed under an ISC-like license, type "license" to see terms        |
+ \----------------------------------------------------------------------------/
+ Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+
+-- Running command `
+        read_aiger /Users/yoyowang/Desktop/benchmark/log2.aig
+        hierarchy -check -auto-top
+        proc; opt; techmap; opt;
+        # 先用ABC生成K=6单输出LUT基线，再由lut6d_map执行双输出打包
+        abc -lut 6
+        opt
+        lut6d_map
+        clean
+        stat
+        write_verilog test_output_epfl/log2_lut6d_mapped.v
+    ' --
+
+1. Executing AIGER frontend.
+<suppressed ~1 debug messages>
+Removed 0 unused cells and 64 unused wires.
+
+2. Executing HIERARCHY pass (managing design hierarchy).
+
+2.1. Finding top of design hierarchy..
+root of   0 design levels: /Users/yoyowang/Desktop/benchmark/log2.aig
+Automatically selected /Users/yoyowang/Desktop/benchmark/log2.aig as design top module.
+
+2.2. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/log2.aig
+
+2.3. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/log2.aig
+Removed 0 unused modules.
+
+3. Executing PROC pass (convert processes to netlists).
+
+3.1. Executing PROC_CLEAN pass (remove empty switches from decision trees).
+Cleaned up 0 empty switches.
+
+3.2. Executing PROC_RMDEAD pass (remove dead branches from decision trees).
+Removed a total of 0 dead cases.
+
+3.3. Executing PROC_PRUNE pass (remove redundant assignments in processes).
+Removed 0 redundant assignments.
+Promoted 0 assignments to connections.
+
+3.4. Executing PROC_INIT pass (extract init attributes).
+
+3.5. Executing PROC_ARST pass (detect async resets in processes).
+
+3.6. Executing PROC_ROM pass (convert switches to ROMs).
+Converted 0 switches.
+
+3.7. Executing PROC_MUX pass (convert decision trees to multiplexers).
+
+3.8. Executing PROC_DLATCH pass (convert process syncs to latches).
+
+3.9. Executing PROC_DFF pass (convert process syncs to FFs).
+
+3.10. Executing PROC_MEMWR pass (convert process memory writes to cells).
+
+3.11. Executing PROC_CLEAN pass (remove empty switches from decision trees).
+Cleaned up 0 empty switches.
+
+3.12. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+4. Executing OPT pass (performing simple optimizations).
+
+4.1. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+4.2. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+4.3. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+4.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/log2.aig.
+Performed a total of 0 changes.
+
+4.5. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+4.6. Executing OPT_DFF pass (perform DFF optimizations).
+
+4.7. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+
+4.8. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+4.9. Finished fast OPT passes. (There is nothing left to do.)
+
+5. Executing TECHMAP pass (map to technology primitives).
+
+5.1. Executing Verilog-2005 frontend: /Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v
+Parsing Verilog input from `/Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v' to AST representation.
+verilog frontend filename /Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v
+Generating RTLIL representation for module `\_90_simplemap_bool_ops'.
+Generating RTLIL representation for module `\_90_simplemap_reduce_ops'.
+Generating RTLIL representation for module `\_90_simplemap_logic_ops'.
+Generating RTLIL representation for module `\_90_simplemap_compare_ops'.
+Generating RTLIL representation for module `\_90_simplemap_various'.
+Generating RTLIL representation for module `\_90_simplemap_registers'.
+Generating RTLIL representation for module `\_90_shift_ops_shr_shl_sshl_sshr'.
+Generating RTLIL representation for module `\_90_shift_shiftx'.
+Generating RTLIL representation for module `\_90_fa'.
+Generating RTLIL representation for module `\_90_lcu_brent_kung'.
+Generating RTLIL representation for module `\_90_alu'.
+Generating RTLIL representation for module `\_90_macc'.
+Generating RTLIL representation for module `\_90_alumacc'.
+Generating RTLIL representation for module `\$__div_mod_u'.
+Generating RTLIL representation for module `\$__div_mod_trunc'.
+Generating RTLIL representation for module `\_90_div'.
+Generating RTLIL representation for module `\_90_mod'.
+Generating RTLIL representation for module `\$__div_mod_floor'.
+Generating RTLIL representation for module `\_90_divfloor'.
+Generating RTLIL representation for module `\_90_modfloor'.
+Generating RTLIL representation for module `\_90_pow'.
+Generating RTLIL representation for module `\_90_pmux'.
+Generating RTLIL representation for module `\_90_demux'.
+Generating RTLIL representation for module `\_90_lut'.
+Generating RTLIL representation for module `\$connect'.
+Generating RTLIL representation for module `\$input_port'.
+Successfully finished Verilog frontend.
+
+5.2. Continuing TECHMAP pass.
+No more expansions possible.
+<suppressed ~77 debug messages>
+
+6. Executing OPT pass (performing simple optimizations).
+
+6.1. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+6.2. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+6.3. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+6.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/log2.aig.
+Performed a total of 0 changes.
+
+6.5. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+6.6. Executing OPT_DFF pass (perform DFF optimizations).
+
+6.7. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+
+6.8. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+6.9. Finished fast OPT passes. (There is nothing left to do.)
+
+7. Executing ABC pass (technology mapping using ABC).
+
+7.1. Extracting gate netlist of module `\/Users/yoyowang/Desktop/benchmark/log2.aig' to `<abc-temp-dir>/input.blif'..
+
+7.1.1. Executed ABC.
+Extracted 54494 gates and 54526 wires to a netlist network with 32 inputs and 32 outputs.
+Running ABC script: <abc-temp-dir>/abc.script
+ABC: 
+ABC: ======== ABC command line "source <abc-temp-dir>/abc.script"
+ABC: + read_blif <abc-temp-dir>/input.blif 
+ABC: + read_lut /var/folders/6m/kyf8390j1xl9kqlndxdjdvfc0000gn/T/yosys-abc-5KL4A2/lutdefs.txt 
+ABC: + strash 
+ABC: + &get -n 
+ABC: + &fraig -x 
+ABC: + &put 
+ABC: + scorr 
+ABC: Warning: The network is combinational (run "fraig" or "fraig_sweep").
+ABC: + dc2 
+ABC: + dretime 
+ABC: + strash 
+ABC: + dch -f 
+ABC: + if 
+ABC: + mfs2 
+ABC: + lutpack -S 1 
+ABC: + write_blif <abc-temp-dir>/output.blif 
+
+7.1.2. Re-integrating ABC results.
+ABC RESULTS:              $lut cells:     8204
+ABC RESULTS:        internal signals:    54462
+ABC RESULTS:           input signals:       32
+ABC RESULTS:          output signals:       32
+Removing temp directory.
+Removing global temp directory.
+
+8. Executing OPT pass (performing simple optimizations).
+
+8.1. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+8.2. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+8.3. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+8.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/log2.aig.
+Performed a total of 0 changes.
+
+8.5. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+8.6. Executing OPT_DFF pass (perform DFF optimizations).
+
+8.7. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+Removed 0 unused cells and 54526 unused wires.
+<suppressed ~1 debug messages>
+
+8.8. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+8.9. Rerunning OPT passes. (Maybe there is more to do..)
+
+8.10. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+8.11. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/log2.aig.
+Performed a total of 0 changes.
+
+8.12. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+Removed a total of 0 cells.
+
+8.13. Executing OPT_DFF pass (perform DFF optimizations).
+
+8.14. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/log2.aig..
+
+8.15. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/log2.aig.
+
+8.16. Finished fast OPT passes. (There is nothing left to do.)
+
+9. Start MapperPass
+
+10. Continuing MapperPass pass.
+Cleaning up global data structures...
+Memory cleanup complete.
+Runtime budget: gates=8204 cuts=144 pairs=32 disjoint=20 layer_cuts=3 i5=8 rounds=8 postpack1_win=640 postpack2_limit=6144 postpack2_win=256 postpack2_chunks=2 seed_mul=14
+Initializing estimated reference counts (ABC-style)...
+Phase 1: Generating cuts for all nodes...
+
+Phase 2: Computing arrival and required times (ABC-style)...
+  Computing arrival times (forward pass)...
+  Computing required times (backward pass)...
+    Global max arrival time (critical path): 67.00
+    Found 0 nodes on or near critical path (slack < 0.5)
+
+Phase 2.25: Recomputing ref-counts from best cuts...
+
+Phase 2.5: Multi-round mapping optimization (ABC-style, 8 rounds)...
+  Round 1: delay optimization...
+  Computing arrival times (forward pass)...
+    Round 1 result: estimated LUTs=8204, max_delay=66.0, changed=0
+  Round 2: area optimization...
+  Computing arrival times (forward pass)...
+    Round 2 result: estimated LUTs=8204, max_delay=66.0, changed=0
+    Early stop: best cuts converged at round 2
+
+Phase 2.75: Exact area-recovery rounds (2 rounds)...
+  Computing arrival times (forward pass)...
+    Final area round 1: changed=0
+
+Phase 3: Skipping non-decision bit-state simulation...
+
+Pre-computing protected signals (all best cut leaves)...
+  Total protected signals: 8204
+
+=== Covering Mode 1: Standard dual-enabled ===
+
+=== Layer-Based Covering Algorithm ===
+  Dual-output pairing: enabled
+  Layer 1: 32 signals to cover
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$78/$abc$77$auto$blifparse.cc:536:parse_blif$6990 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7295 $abc$77$new_n7296 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$78/$abc$77$auto$blifparse.cc:536:parse_blif$6990 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7295 $abc$77$new_n7296 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$78/$abc$77$auto$blifparse.cc:536:parse_blif$6990 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7295 $abc$77$new_n7296 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$78/$abc$77$auto$blifparse.cc:536:parse_blif$6990 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7295 $abc$77$new_n7296 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$6990/$abc$77$auto$blifparse.cc:536:parse_blif$78 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$6990/$abc$77$auto$blifparse.cc:536:parse_blif$78 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$6990/$abc$77$auto$blifparse.cc:536:parse_blif$78 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$6990/$abc$77$auto$blifparse.cc:536:parse_blif$78 (shared=4, total_inputs=6)
+Warning:     shared inputs: $abc$77$new_n7136 $abc$77$new_n7293 $abc$77$new_n67 $abc$77$new_n7292
+Warning:     node cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     cand cut leaves: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     merged cut leaves: $abc$77$new_n7296 $abc$77$new_n7295 $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136
+Warning:     potential I5: $abc$77$new_n7292 $abc$77$new_n67 $abc$77$new_n7293 $abc$77$new_n7136 $abc$77$new_n7295 $abc$77$new_n7296
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7050/$abc$77$auto$blifparse.cc:536:parse_blif$7996 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     cand cut leaves: $abc$77$new_n8377 $abc$77$new_n8349
+Warning:     merged cut leaves: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     potential I5: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7361 $abc$77$new_n8608 $abc$77$new_n7367 $abc$77$new_n7369
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7050/$abc$77$auto$blifparse.cc:536:parse_blif$7996 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     cand cut leaves: $abc$77$new_n8377 $abc$77$new_n8349
+Warning:     merged cut leaves: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     potential I5: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7361 $abc$77$new_n8608 $abc$77$new_n7367 $abc$77$new_n7369
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7050/$abc$77$auto$blifparse.cc:536:parse_blif$7996 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     cand cut leaves: $abc$77$new_n8377 $abc$77$new_n8349
+Warning:     merged cut leaves: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     potential I5: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7361 $abc$77$new_n8608 $abc$77$new_n7367 $abc$77$new_n7369
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7050/$abc$77$auto$blifparse.cc:536:parse_blif$7996 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     cand cut leaves: $abc$77$new_n8377 $abc$77$new_n8349
+Warning:     merged cut leaves: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7369 $abc$77$new_n7367 $abc$77$new_n8608 $abc$77$new_n7361
+Warning:     potential I5: $abc$77$new_n8349 $abc$77$new_n8377 $abc$77$new_n7361 $abc$77$new_n8608 $abc$77$new_n7367 $abc$77$new_n7369
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$7465 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n7888 $abc$77$new_n7801
+Warning:     merged cut leaves: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$7465 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n7888 $abc$77$new_n7801
+Warning:     merged cut leaves: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$7465 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n7888 $abc$77$new_n7801
+Warning:     merged cut leaves: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$7465 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n7888 $abc$77$new_n7801
+Warning:     merged cut leaves: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n7801 $abc$77$new_n7888 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$8030 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n8071 $abc$77$new_n8039
+Warning:     merged cut leaves: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$8030 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n8071 $abc$77$new_n8039
+Warning:     merged cut leaves: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$8030 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n8071 $abc$77$new_n8039
+Warning:     merged cut leaves: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+Warning: Layer covering: no valid LUT6D mapping for $abc$77$auto$blifparse.cc:536:parse_blif$7171/$abc$77$auto$blifparse.cc:536:parse_blif$8030 (shared=0, total_inputs=6)
+Warning:     shared inputs:
+Warning:     node cut leaves: $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     cand cut leaves: $abc$77$new_n8071 $abc$77$new_n8039
+Warning:     merged cut leaves: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7491 $abc$77$new_n7494 $abc$77$new_n7495 $abc$77$new_n7492
+Warning:     potential I5: $abc$77$new_n8039 $abc$77$new_n8071 $abc$77$new_n7492 $abc$77$new_n7495 $abc$77$new_n7494 $abc$77$new_n7491
+    Generated 55 candidates: 23 dual, 32 single
+    Selected: 11 dual-output, 16 single-output LUTs
+  Layer 2: 86 signals to cover
+    Generated 444 candidates: 363 dual, 81 single
+    Selected: 27 dual-output, 40 single-output LUTs
+  Layer 3: 207 signals to cover
+    Generated 575 candidates: 447 dual, 128 single
+    Selected: 35 dual-output, 75 single-output LUTs
+  Layer 4: 303 signals to cover
+    Generated 1243 candidates: 1023 dual, 220 single
+    Selected: 70 dual-output, 117 single-output LUTs
+  Layer 5: 431 signals to cover
+    Generated 1602 candidates: 1309 dual, 293 single
+    Selected: 91 dual-output, 154 single-output LUTs
+  Layer 6: 632 signals to cover
+    Generated 3181 candidates: 2727 dual, 454 single
+    Selected: 144 dual-output, 233 single-output LUTs
+  Layer 7: 993 signals to cover
+    Generated 7266 candidates: 6570 dual, 696 single
+    Selected: 237 dual-output, 304 single-output LUTs
+  Layer 8: 1283 signals to cover
+    Generated 6111 candidates: 5314 dual, 797 single
+    Selected: 230 dual-output, 435 single-output LUTs
+  Layer 9: 1615 signals to cover
+    Generated 5427 candidates: 4530 dual, 897 single
+    Selected: 218 dual-output, 556 single-output LUTs
+  Layer 10: 1857 signals to cover
+    Generated 3592 candidates: 2678 dual, 914 single
+    Selected: 187 dual-output, 619 single-output LUTs
+  Layer 11: 1773 signals to cover
+    Generated 2092 candidates: 1353 dual, 739 single
+    Selected: 144 dual-output, 516 single-output LUTs
+  Layer 12: 1635 signals to cover
+    Generated 1813 candidates: 1138 dual, 675 single
+    Selected: 119 dual-output, 485 single-output LUTs
+  Layer 13: 1498 signals to cover
+    Generated 1702 candidates: 1136 dual, 566 single
+    Selected: 74 dual-output, 444 single-output LUTs
+  Layer 14: 1186 signals to cover
+    Generated 1390 candidates: 983 dual, 407 single
+    Selected: 55 dual-output, 316 single-output LUTs
+  Layer 15: 909 signals to cover
+    Generated 825 candidates: 574 dual, 251 single
+    Selected: 32 dual-output, 193 single-output LUTs
+  Layer 16: 708 signals to cover
+    Generated 464 candidates: 304 dual, 160 single
+    Selected: 15 dual-output, 133 single-output LUTs
+  Layer 17: 543 signals to cover
+    Generated 107 candidates: 17 dual, 90 single
+    Selected: 5 dual-output, 83 single-output LUTs
+  Layer 18: 339 signals to cover
+    Generated 61 candidates: 8 dual, 53 single
+    Selected: 4 dual-output, 48 single-output LUTs
+  Layer 19: 194 signals to cover
+    Generated 38 candidates: 8 dual, 30 single
+    Selected: 2 dual-output, 27 single-output LUTs
+  Layer 20: 88 signals to cover
+    Generated 9 candidates: 0 dual, 9 single
+    Selected: 0 dual-output, 9 single-output LUTs
+  Layer 21: 22 signals to cover
+    Generated 1 candidates: 0 dual, 1 single
+    Selected: 0 dual-output, 1 single-output LUTs
+  Total layers: 21
+  Total LUTs: 1700 dual-output + 4804 single-output = 6504
+
+=== Covering Mode 3: Best-cut single-output ===
+  Post-packing: merged 43 single-LUT pairs into dual LUTs
+  Post-packing: merged 1451 single-LUT pairs into dual LUTs
+  Post-packing pass 2 chunk 1/1: merged 1 pairs
+  Post-packing pass 2 (alt-cuts): merged 1 more pairs
+  Covering mode decision: mode1=6461, mode2=skipped, mode3=6752, picked=standard-dual (6461 LUTs)
+
+Total LUT6D cells to be added: 1743
+Total single-output LUTs to be added: 4718
+Removed 8204 original cells covered by LUT outputs
+
+Final: 1743 LUT6D + 4718 single LUT = 6461 total LUTs
+Cleaning up global data structures...
+Memory cleanup complete.
+<suppressed ~86454 debug messages>
+
+. Printing statistics.
+
+=== /Users/yoyowang/Desktop/benchmark/log2.aig ===
+
+        +----------Local Count, excluding submodules.
+        | 
+     8236 wires
+     8236 wire bits
+       64 public wires
+       64 public wire bits
+       64 ports
+       64 port bits
+     6461 cells
+       79   GTP_LUT3
+      653   GTP_LUT4
+      329   GTP_LUT4D
+     1048   GTP_LUT5
+      560   GTP_LUT5D
+     2938   GTP_LUT6
+      854   GTP_LUT6D
+
+. Executing Verilog backend.
+
+1. Executing BMUXMAP pass.
+
+2. Executing DEMUXMAP pass.
+Dumping module `\/Users/yoyowang/Desktop/benchmark/log2.aig'.
+
+Warnings: 25 unique messages, 120 total
+End of script. Logfile hash: 27c29b450b, CPU: user 7.28s system 0.09s, MEM: 193.69 MB peak
+Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+Time spent: 96% 1x abc (234 sec), 2% 1x lut6d_map (5 sec), ...

@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/ctrl.aig; ps; if -K 6; ps; write_verilog test_output_epfl/ctrl_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/ctrl:[0m i/o =    7/   26  lat =    0  and =    174  lev = 10
+[1;37m/Users/yoyowang/Desktop/benchmark/ctrl:[0m i/o =    7/   26  lat =    0  nd =    29  edge =    136  aig  =   316  lev = 2

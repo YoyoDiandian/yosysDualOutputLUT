@@ -1,0 +1,3 @@
+
+======== ABC command line "cec test_output_epfl/router_lut6d_gold_cec.aig test_output_epfl/router_lut6d_gate_cec.aig"
+Networks are equivalent.  Time =     0.01 sec

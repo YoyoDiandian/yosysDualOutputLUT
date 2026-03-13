@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/sqrt.aig; ps; if -K 6; ps; write_verilog test_output_epfl/sqrt_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/sqrt:[0m i/o =  128/   64  lat =    0  and =  24618  lev =5058
+[1;37m/Users/yoyowang/Desktop/benchmark/sqrt:[0m i/o =  128/   64  lat =    0  nd =  5724  edge =  26936  aig  = 38251  lev = 1033

@@ -1,0 +1,924 @@
+
+ /----------------------------------------------------------------------------\
+ |  yosys -- Yosys Open SYnthesis Suite                                       |
+ |  Copyright (C) 2012 - 2025  Claire Xenia Wolf <claire@yosyshq.com>         |
+ |  Distributed under an ISC-like license, type "license" to see terms        |
+ \----------------------------------------------------------------------------/
+ Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+
+-- Running command `
+        read_verilog -icells techlibs/yoyo/cells_sim.v
+        read_verilog test_output_epfl/adder_lut6d_mapped.v
+        hierarchy -check -auto-top
+        flatten
+        techmap
+        opt
+        aigmap
+        write_aiger test_output_epfl/adder_lut6d_gate_cec.aig
+    ' --
+
+1. Executing Verilog-2005 frontend: techlibs/yoyo/cells_sim.v
+Parsing Verilog input from `techlibs/yoyo/cells_sim.v' to AST representation.
+verilog frontend filename techlibs/yoyo/cells_sim.v
+Generating RTLIL representation for module `\GTP_LUT1'.
+Generating RTLIL representation for module `\GTP_LUT2'.
+Generating RTLIL representation for module `\GTP_LUT3'.
+Generating RTLIL representation for module `\GTP_LUT4'.
+Generating RTLIL representation for module `\GTP_LUT5'.
+Generating RTLIL representation for module `\GTP_LUT6'.
+Generating RTLIL representation for module `\GTP_LUT6D'.
+Generating RTLIL representation for module `\GTP_LUT5D'.
+Generating RTLIL representation for module `\GTP_LUT4D'.
+Successfully finished Verilog frontend.
+
+2. Executing Verilog-2005 frontend: test_output_epfl/adder_lut6d_mapped.v
+Parsing Verilog input from `test_output_epfl/adder_lut6d_mapped.v' to AST representation.
+verilog frontend filename test_output_epfl/adder_lut6d_mapped.v
+Generating RTLIL representation for module `\/Users/yoyowang/Desktop/benchmark/adder.aig'.
+Successfully finished Verilog frontend.
+
+3. Executing HIERARCHY pass (managing design hierarchy).
+Attribute `top' found on module `/Users/yoyowang/Desktop/benchmark/adder.aig'. Setting top module to /Users/yoyowang/Desktop/benchmark/adder.aig.
+
+3.1. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/adder.aig
+Used module:     \GTP_LUT6
+Used module:     \GTP_LUT5
+Used module:     \GTP_LUT4
+Used module:     \GTP_LUT5D
+Used module:     \GTP_LUT4D
+Used module:     \GTP_LUT6D
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+
+3.2. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Generating RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+
+3.3. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Generating RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000010000000000010001100000010001100110010001100110011
+
+3.4. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000010000000000010001100000010001100110010001100110011
+Generating RTLIL representation for module `$paramod$e3cd544684fc91e86ca5669b17c788d364f5b83b\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000001110000000001110111100001110111111111110111111111111
+
+3.5. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000001110000000001110111100001110111111111110111111111111
+Generating RTLIL representation for module `$paramod$a20092d3af430abe724955a14311998f5f328048\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000001000000000001111100000001111111110001111111111111
+Found cached RTLIL representation for module `$paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6'.
+Parameter \INIT = 64'0011001100110001001100110001000000110001000000000001000000000000
+Found cached RTLIL representation for module `$paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6'.
+Parameter \INIT = 64'0000000100000011000001110000111100011111001111110111111111111111
+
+3.6. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000100000011000001110000111100011111001111110111111111111111
+Generating RTLIL representation for module `$paramod$fc39546e9faa7336629e9d3590aaa2123a9f65f9\GTP_LUT6'.
+Parameter \INIT = 34287551
+
+3.7. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 34287551
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111'.
+Parameter \INIT = 34287551
+Found cached RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111'.
+Parameter \INIT = 34287551
+Found cached RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111'.
+Parameter \INIT = 34287551
+Found cached RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+
+3.8. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Generating RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111000100001110000100001110111100001110111100011110111100010000
+
+3.9. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111000100001110000100001110111100001110111100011110111100010000
+Generating RTLIL representation for module `$paramod$37fc9e85b75f1287d96dfef01c8e173fb3dc83cf\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111110111111111110000011111110000000001110000000000000
+
+3.10. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111110111111111110000011111110000000001110000000000000
+Generating RTLIL representation for module `$paramod$a8e9908f64ceeff107f0bd491f3ed7c3a4d07066\GTP_LUT6'.
+Parameter \INIT = 64'1111111000000001111000000001111100000001111111100001111111100000
+Found cached RTLIL representation for module `$paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6'.
+Parameter \INIT = 64'1110000111000011100001110000111100011110001111000111100011110000
+
+3.11. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1110000111000011100001110000111100011110001111000111100011110000
+Generating RTLIL representation for module `$paramod$50261855712be198aee17f91e53fdce5d686efe7\GTP_LUT6'.
+Parameter \INIT = 16'1110000100011110
+
+3.12. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4'.
+Parameter \INIT = 16'1110000100011110
+Generating RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'0001111011100001
+
+3.13. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4'.
+Parameter \INIT = 16'0001111011100001
+Generating RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'0001111011100001'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 16'1110000100011110
+Found cached RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1110000100011110'.
+Parameter \INIT = 3343621
+
+3.14. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 3343621
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 32'11001100000000000000010100000101
+
+3.15. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 32'11001100000000000000010100000101
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101'.
+Parameter \INIT = 32'11001100000000001010000010100000
+
+3.16. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000000000010100000101
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000000000010100000101
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101'.
+Parameter \INIT = 3383456
+
+3.17. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 3383456
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100111010000010100000'.
+Parameter \INIT = 3383456
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100111010000010100000'.
+Parameter \INIT = 3343621
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101'.
+Parameter \INIT = 16'1000100000010001
+
+3.18. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4D'.
+Parameter \INIT = 16'1000100000010001
+Generating RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'1000100000010001'.
+Parameter \INIT = 32'11001100000000001010000010100000
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000'.
+Parameter \INIT = 32'11001100000000000000010100000101
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101'.
+Parameter \INIT = 987409
+
+3.19. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 987409
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001'.
+Parameter \INIT = 286326799
+
+3.20. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 286326799
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00010001000100010000000000001111'.
+Parameter \INIT = 286326799
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00010001000100010000000000001111'.
+Parameter \INIT = 987409
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001'.
+Parameter \INIT = 987409
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001'.
+Parameter \INIT = 987409
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001'.
+Parameter \INIT = 987409
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001'.
+Parameter \INIT = 987409
+Found cached RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001'.
+Parameter \INIT = 16'0110100111000000
+
+3.21. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4D'.
+Parameter \INIT = 16'0110100111000000
+Generating RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100111000000'.
+Parameter \INIT = 16'0110100111000000
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100111000000'.
+Parameter \INIT = 16'0110100111000000
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100111000000'.
+Parameter \INIT = 16'0110100111000000
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100111000000'.
+Parameter \INIT = 16'0110100100101011
+
+3.22. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4D'.
+Parameter \INIT = 16'0110100100101011
+Generating RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 16'0110100100101011
+Found cached RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0110100100101011'.
+Parameter \INIT = 32'10010011011011000101101001011010
+
+3.23. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 32'10010011011011000101101001011010
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'10010011011011000101101001011010'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+
+3.24. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Generating RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+Parameter \INIT = 64'1101001001001011001011011011010001100110100110010110011010011001
+Found cached RTLIL representation for module `$paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D'.
+
+3.25. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/adder.aig
+Used module:     $paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6
+Used module:     $paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6
+Used module:     $paramod$e3cd544684fc91e86ca5669b17c788d364f5b83b\GTP_LUT6
+Used module:     $paramod$a20092d3af430abe724955a14311998f5f328048\GTP_LUT6
+Used module:     $paramod$fc39546e9faa7336629e9d3590aaa2123a9f65f9\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111
+Used module:     $paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6
+Used module:     $paramod$37fc9e85b75f1287d96dfef01c8e173fb3dc83cf\GTP_LUT6
+Used module:     $paramod$a8e9908f64ceeff107f0bd491f3ed7c3a4d07066\GTP_LUT6
+Used module:     $paramod$50261855712be198aee17f91e53fdce5d686efe7\GTP_LUT6
+Used module:     $paramod\GTP_LUT4\INIT=16'1110000100011110
+Used module:     $paramod\GTP_LUT4\INIT=16'0001111011100001
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101
+Used module:     $paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101
+Used module:     $paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000000001100111010000010100000
+Used module:     $paramod\GTP_LUT4D\INIT=16'1000100000010001
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001
+Used module:     $paramod\GTP_LUT5D\INIT=32'00010001000100010000000000001111
+Used module:     $paramod\GTP_LUT4D\INIT=16'0110100111000000
+Used module:     $paramod\GTP_LUT4D\INIT=16'0110100100101011
+Used module:     $paramod\GTP_LUT5D\INIT=32'10010011011011000101101001011010
+Used module:     $paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D
+
+3.26. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/adder.aig
+Used module:     $paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6
+Used module:     $paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6
+Used module:     $paramod$e3cd544684fc91e86ca5669b17c788d364f5b83b\GTP_LUT6
+Used module:     $paramod$a20092d3af430abe724955a14311998f5f328048\GTP_LUT6
+Used module:     $paramod$fc39546e9faa7336629e9d3590aaa2123a9f65f9\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111
+Used module:     $paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6
+Used module:     $paramod$37fc9e85b75f1287d96dfef01c8e173fb3dc83cf\GTP_LUT6
+Used module:     $paramod$a8e9908f64ceeff107f0bd491f3ed7c3a4d07066\GTP_LUT6
+Used module:     $paramod$50261855712be198aee17f91e53fdce5d686efe7\GTP_LUT6
+Used module:     $paramod\GTP_LUT4\INIT=16'1110000100011110
+Used module:     $paramod\GTP_LUT4\INIT=16'0001111011100001
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101
+Used module:     $paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101
+Used module:     $paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000000001100111010000010100000
+Used module:     $paramod\GTP_LUT4D\INIT=16'1000100000010001
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001
+Used module:     $paramod\GTP_LUT5D\INIT=32'00010001000100010000000000001111
+Used module:     $paramod\GTP_LUT4D\INIT=16'0110100111000000
+Used module:     $paramod\GTP_LUT4D\INIT=16'0110100100101011
+Used module:     $paramod\GTP_LUT5D\INIT=32'10010011011011000101101001011010
+Used module:     $paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D
+Removing unused module `\GTP_LUT4D'.
+Removing unused module `\GTP_LUT5D'.
+Removing unused module `\GTP_LUT6D'.
+Removing unused module `\GTP_LUT6'.
+Removing unused module `\GTP_LUT5'.
+Removing unused module `\GTP_LUT4'.
+Removing unused module `\GTP_LUT3'.
+Removing unused module `\GTP_LUT2'.
+Removing unused module `\GTP_LUT1'.
+Removed 9 unused modules.
+
+4. Executing FLATTEN pass (flatten design).
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'11001100000000000000010100000101.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'00000000001100110000010100000101.
+Deleting now unused module $paramod\GTP_LUT4\INIT=16'0001111011100001.
+Deleting now unused module $paramod\GTP_LUT4\INIT=16'1110000100011110.
+Deleting now unused module $paramod$50261855712be198aee17f91e53fdce5d686efe7\GTP_LUT6.
+Deleting now unused module $paramod$a8e9908f64ceeff107f0bd491f3ed7c3a4d07066\GTP_LUT6.
+Deleting now unused module $paramod$37fc9e85b75f1287d96dfef01c8e173fb3dc83cf\GTP_LUT6.
+Deleting now unused module $paramod$f57f184664bfdc4171d7a8a81019d0c47afde079\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00000010000010110010111110111111.
+Deleting now unused module $paramod$fc39546e9faa7336629e9d3590aaa2123a9f65f9\GTP_LUT6.
+Deleting now unused module $paramod$a20092d3af430abe724955a14311998f5f328048\GTP_LUT6.
+Deleting now unused module $paramod$e3cd544684fc91e86ca5669b17c788d364f5b83b\GTP_LUT6.
+Deleting now unused module $paramod$1b0cf9f9e910e4663bf020671d152b3dba0d9f41\GTP_LUT6.
+Deleting now unused module $paramod$e68f5203ec22199ed8d957b9860638dff63fd203\GTP_LUT6.
+Deleting now unused module $paramod$c6b41a901b504991f5f3f144539965077f413ad8\GTP_LUT6D.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'10010011011011000101101001011010.
+Deleting now unused module $paramod\GTP_LUT4D\INIT=16'0110100100101011.
+Deleting now unused module $paramod\GTP_LUT4D\INIT=16'0110100111000000.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'00010001000100010000000000001111.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'00000000000011110001000100010001.
+Deleting now unused module $paramod\GTP_LUT4D\INIT=16'1000100000010001.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'00000000001100111010000010100000.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'11001100000000001010000010100000.
+<suppressed ~172 debug messages>
+
+5. Executing TECHMAP pass (map to technology primitives).
+
+5.1. Executing Verilog-2005 frontend: /Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v
+Parsing Verilog input from `/Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v' to AST representation.
+verilog frontend filename /Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v
+Generating RTLIL representation for module `\_90_simplemap_bool_ops'.
+Generating RTLIL representation for module `\_90_simplemap_reduce_ops'.
+Generating RTLIL representation for module `\_90_simplemap_logic_ops'.
+Generating RTLIL representation for module `\_90_simplemap_compare_ops'.
+Generating RTLIL representation for module `\_90_simplemap_various'.
+Generating RTLIL representation for module `\_90_simplemap_registers'.
+Generating RTLIL representation for module `\_90_shift_ops_shr_shl_sshl_sshr'.
+Generating RTLIL representation for module `\_90_shift_shiftx'.
+Generating RTLIL representation for module `\_90_fa'.
+Generating RTLIL representation for module `\_90_lcu_brent_kung'.
+Generating RTLIL representation for module `\_90_alu'.
+Generating RTLIL representation for module `\_90_macc'.
+Generating RTLIL representation for module `\_90_alumacc'.
+Generating RTLIL representation for module `\$__div_mod_u'.
+Generating RTLIL representation for module `\$__div_mod_trunc'.
+Generating RTLIL representation for module `\_90_div'.
+Generating RTLIL representation for module `\_90_mod'.
+Generating RTLIL representation for module `\$__div_mod_floor'.
+Generating RTLIL representation for module `\_90_divfloor'.
+Generating RTLIL representation for module `\_90_modfloor'.
+Generating RTLIL representation for module `\_90_pow'.
+Generating RTLIL representation for module `\_90_pmux'.
+Generating RTLIL representation for module `\_90_demux'.
+Generating RTLIL representation for module `\_90_lut'.
+Generating RTLIL representation for module `\$connect'.
+Generating RTLIL representation for module `\$input_port'.
+Successfully finished Verilog frontend.
+
+5.2. Continuing TECHMAP pass.
+Using extmapper simplemap for cells of type $mux.
+Using extmapper simplemap for cells of type $lut.
+No more expansions possible.
+<suppressed ~1063 debug messages>
+
+6. Executing OPT pass (performing simple optimizations).
+
+6.1. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/adder.aig.
+<suppressed ~6610 debug messages>
+
+6.2. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/adder.aig'.
+<suppressed ~4869 debug messages>
+Removed a total of 1623 cells.
+
+6.3. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/adder.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+6.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/adder.aig.
+Performed a total of 0 changes.
+
+6.5. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/adder.aig'.
+Removed a total of 0 cells.
+
+6.6. Executing OPT_DFF pass (perform DFF optimizations).
+
+6.7. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/adder.aig..
+Removed 0 unused cells and 1169 unused wires.
+<suppressed ~1 debug messages>
+
+6.8. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/adder.aig.
+<suppressed ~175 debug messages>
+
+6.9. Rerunning OPT passes. (Maybe there is more to do..)
+
+6.10. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/adder.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+6.11. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/adder.aig.
+Performed a total of 0 changes.
+
+6.12. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/adder.aig'.
+Removed a total of 0 cells.
+
+6.13. Executing OPT_DFF pass (perform DFF optimizations).
+
+6.14. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/adder.aig..
+
+6.15. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/adder.aig.
+
+6.16. Finished fast OPT passes. (There is nothing left to do.)
+
+7. Executing AIGMAP pass (map logic to AIG).
+Module /Users/yoyowang/Desktop/benchmark/adder.aig: replaced 1344 cells with 9408 new cells, skipped 374 cells.
+  replaced 1 cell types:
+    1344 $_MUX_
+  not replaced 2 cell types:
+     202 $_NOT_
+     172 $scopeinfo
+
+8. Executing AIGER backend.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[0] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[1] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[2] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[3] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[4] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[5] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[6] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[7] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[8] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[9] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[10] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[11] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[12] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[13] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[14] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[15] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[16] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[17] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[18] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[19] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[20] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[21] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[22] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[23] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[24] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[25] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[26] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[27] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[28] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[29] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[30] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[31] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[32] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[33] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[34] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[35] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[36] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[37] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[38] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[39] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[40] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[41] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[42] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[43] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[44] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[45] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[46] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[47] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[48] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[49] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[50] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[51] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[52] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[53] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[54] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[55] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[56] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[57] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[58] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[59] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[60] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[61] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[62] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[63] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[64] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[65] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[66] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[67] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[68] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[69] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[70] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[71] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[72] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[73] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[74] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[75] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[76] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[77] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[78] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[79] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[80] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[81] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[82] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[83] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[84] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[85] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[86] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[87] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[88] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[89] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[90] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[91] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[92] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[93] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[94] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[95] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[96] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[97] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[98] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[99] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[100] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[101] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[102] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[103] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[104] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[105] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[106] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[107] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[108] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[109] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[110] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[111] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[112] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[113] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[114] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[115] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[116] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[117] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[118] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[119] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[120] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[121] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[122] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[123] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[124] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[125] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[126] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\a[127] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[0] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[1] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[2] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[3] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[4] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[5] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[6] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[7] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[8] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[9] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[10] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[11] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[12] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[13] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[14] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[15] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[16] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[17] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[18] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[19] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[20] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[21] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[22] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[23] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[24] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[25] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[26] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[27] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[28] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[29] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[30] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[31] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[32] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[33] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[34] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[35] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[36] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[37] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[38] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[39] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[40] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[41] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[42] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[43] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[44] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[45] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[46] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[47] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[48] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[49] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[50] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[51] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[52] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[53] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[54] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[55] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[56] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[57] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[58] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[59] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[60] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[61] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[62] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[63] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[64] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[65] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[66] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[67] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[68] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[69] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[70] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[71] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[72] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[73] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[74] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[75] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[76] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[77] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[78] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[79] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[80] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[81] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[82] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[83] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[84] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[85] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[86] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[87] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[88] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[89] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[90] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[91] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[92] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[93] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[94] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[95] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[96] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[97] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[98] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[99] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[100] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[101] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[102] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[103] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[104] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[105] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[106] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[107] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[108] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[109] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[110] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[111] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[112] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[113] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[114] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[115] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[116] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[117] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[118] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[119] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[120] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[121] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[122] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[123] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[124] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[125] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[126] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/adder.aig.\b[127] like $anyseq.
+Warning: Treating a total of 256 undriven bits in /Users/yoyowang/Desktop/benchmark/adder.aig like $anyseq.
+
+Warnings: 257 unique messages, 257 total
+End of script. Logfile hash: 21a3c02aeb, CPU: user 0.09s system 0.00s, MEM: 39.38 MB peak
+Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+Time spent: 29% 3x opt_expr (0 sec), 18% 5x read_verilog (0 sec), ...

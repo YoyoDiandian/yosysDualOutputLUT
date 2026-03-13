@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/adder.aig; ps; if -K 6; ps; write_verilog test_output_epfl/adder_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/adder:[0m i/o =  256/  129  lat =    0  and =   1020  lev =255
+[1;37m/Users/yoyowang/Desktop/benchmark/adder:[0m i/o =  256/  129  lat =    0  nd =   254  edge =   1036  aig  =  1666  lev = 51

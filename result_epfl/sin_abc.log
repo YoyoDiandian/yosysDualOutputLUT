@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/sin.aig; ps; if -K 6; ps; write_verilog test_output_epfl/sin_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/sin:[0m i/o =   24/   25  lat =    0  and =   5416  lev =225
+[1;37m/Users/yoyowang/Desktop/benchmark/sin:[0m i/o =   24/   25  lat =    0  nd =  1464  edge =   6497  aig  =  9943  lev = 42

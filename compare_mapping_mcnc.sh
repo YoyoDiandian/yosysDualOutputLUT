@@ -11,11 +11,12 @@ set -e
 YOSYS="./yosys"
 ABC="./yosys-abc"
 BLIF_DIR="/Users/yoyowang/Documents/Work/FudanCAD/paper2026/datasets/mcnc2"
-TEST_DIR="test_output_mcnc2"
+TEST_DIR="test_output_mcnc3"
 AIG_DIR="$TEST_DIR/aig"
 
 USE_AIG=1
 ENFORCE_NOT_WORSE_THAN_ABC=1
+LEC_ENGINE="abc_cec"
 for arg in "$@"; do
     case "$arg" in
         --no-aig|--blif)
@@ -24,11 +25,19 @@ for arg in "$@"; do
         --allow-worse-than-abc)
             ENFORCE_NOT_WORSE_THAN_ABC=0
             ;;
+        --lec-abc|--cec)
+            LEC_ENGINE="abc_cec"
+            ;;
+        --lec-yosys)
+            LEC_ENGINE="yosys_equiv"
+            ;;
         --help|-h)
-            echo "Usage: $0 [--no-aig|--blif] [--allow-worse-than-abc]"
+            echo "Usage: $0 [--no-aig|--blif] [--allow-worse-than-abc] [--lec-abc|--cec|--lec-yosys]"
             echo "  Default: convert BLIF to AIG and run mapping on AIG."
             echo "  --no-aig/--blif: run mapping directly on BLIF."
             echo "  --allow-worse-than-abc: disable per-benchmark ABC fallback safeguard."
+            echo "  --lec-abc/--cec: use ABC cec for equivalence (default)."
+            echo "  --lec-yosys: use Yosys equiv_make/equiv_simple/equiv_induct."
             exit 0
             ;;
     esac
@@ -75,6 +84,11 @@ if [ "$ENFORCE_NOT_WORSE_THAN_ABC" -eq 1 ]; then
     echo "Policy: per-benchmark safeguard enabled (fallback to ABC when LUT6D > ABC)"
 else
     echo "Policy: pure LUT6D result (may be worse than ABC on some cases)"
+fi
+if [ "$LEC_ENGINE" = "abc_cec" ]; then
+    echo "LEC engine: ABC cec (fallback to Yosys equiv if needed)"
+else
+    echo "LEC engine: Yosys equiv"
 fi
 echo ""
 
@@ -171,7 +185,7 @@ run_lut6d_mapping() {
         lut6d_map
         clean
         stat
-        write_verilog $TEST_DIR/${basename}_lut6d_mapped.v
+        write_verilog -norename $TEST_DIR/${basename}_lut6d_mapped.v
     " > "$output_log" 2>&1; then
         status=0
     else
@@ -213,13 +227,33 @@ run_lut6d_mapping() {
     echo "$status $total_luts $total_dual $num_lut6d $num_lut6 $num_lut5d $num_lut5 $num_lut4d $num_lut4 $num_lut3 $num_lut2"
 }
 
-# Function to run equivalence checking
-run_equivalence_check() {
+# Function to run equivalence checking (Yosys equiv flow)
+run_equivalence_check_yosys() {
     local src_file=$1
     local mapped_file=$2
     local basename=$3
     local read_cmd=${4:-read_blif}
     local lec_log="$TEST_DIR/${basename}_lec.log"
+    local src_for_lec="$src_file"
+    local src_read_cmd="$read_cmd"
+
+    # read_aiger会把部分匿名端口名保留为$前缀私有名，而Verilog读取后的mapped网表
+    # 端口名可能是转义后的公有名；先统一转成Verilog可避免equiv_make端口匹配误判。
+    if [ "$read_cmd" = "read_aiger" ]; then
+        src_for_lec="$TEST_DIR/${basename}_gold_ref.v"
+        local gold_ref_log="$TEST_DIR/${basename}_gold_ref.log"
+        if $YOSYS -p "
+            $read_cmd $src_file
+            hierarchy -check -auto-top
+            flatten
+            write_verilog -norename $src_for_lec
+        " > "$gold_ref_log" 2>&1; then
+            src_read_cmd="read_verilog"
+        else
+            echo "FAIL"
+            return
+        fi
+    fi
 
     cat > $TEST_DIR/${basename}_lec.ys << EOF
 # Read cell definitions
@@ -233,7 +267,7 @@ flatten
 design -stash after_map
 
 # Read original design
-$read_cmd $src_file
+$src_read_cmd $src_for_lec
 hierarchy -check -auto-top
 flatten
 design -stash before_map
@@ -258,6 +292,84 @@ EOF
     else
         echo "FAIL"
     fi
+}
+
+# Function to run equivalence checking (ABC cec flow)
+run_equivalence_check_abc_cec() {
+    local src_file=$1
+    local mapped_file=$2
+    local basename=$3
+    local read_cmd=${4:-read_blif}
+
+    local gold_aig="$TEST_DIR/${basename}_gold_cec.aig"
+    local gate_aig="$TEST_DIR/${basename}_gate_cec.aig"
+    local gold_prep_log="$TEST_DIR/${basename}_gold_cec_prep.log"
+    local gate_prep_log="$TEST_DIR/${basename}_gate_cec_prep.log"
+    local cec_log="$TEST_DIR/${basename}_cec.log"
+    local lec_log="$TEST_DIR/${basename}_lec.log"
+
+    # gold转换：统一读入并导出无symbol的AIG（cec按顺序匹配端口，避免名字不一致导致miter失败）
+    if ! $YOSYS -p "
+        $read_cmd $src_file
+        hierarchy -check -auto-top
+        flatten
+        aigmap
+        write_aiger $gold_aig
+    " > "$gold_prep_log" 2>&1; then
+        echo "FALLBACK"
+        return
+    fi
+
+    # gate转换：用cells_sim功能模型展开LUT后导出AIG
+    if ! $YOSYS -p "
+        read_verilog -icells techlibs/yoyo/cells_sim.v
+        read_verilog $mapped_file
+        hierarchy -check -auto-top
+        flatten
+        techmap
+        opt
+        aigmap
+        write_aiger $gate_aig
+    " > "$gate_prep_log" 2>&1; then
+        echo "FALLBACK"
+        return
+    fi
+
+    if ! $ABC -c "cec $gold_aig $gate_aig" > "$cec_log" 2>&1; then
+        echo "FALLBACK"
+        return
+    fi
+
+    cp "$cec_log" "$lec_log" 2>/dev/null || true
+
+    if grep -q "Networks are equivalent" "$cec_log"; then
+        echo "PASS"
+    elif grep -Eqi "NOT EQUIVALENT|Networks are not equivalent" "$cec_log"; then
+        echo "FAIL"
+    elif grep -q "Miter computation has failed" "$cec_log"; then
+        echo "FALLBACK"
+    else
+        echo "FALLBACK"
+    fi
+}
+
+# Function to run equivalence checking (selected engine with fallback)
+run_equivalence_check() {
+    local src_file=$1
+    local mapped_file=$2
+    local basename=$3
+    local read_cmd=${4:-read_blif}
+
+    if [ "$LEC_ENGINE" = "abc_cec" ]; then
+        local cec_result
+        cec_result=$(run_equivalence_check_abc_cec "$src_file" "$mapped_file" "$basename" "$read_cmd")
+        if [ "$cec_result" = "PASS" ] || [ "$cec_result" = "FAIL" ]; then
+            echo "$cec_result"
+            return
+        fi
+    fi
+
+    run_equivalence_check_yosys "$src_file" "$mapped_file" "$basename" "$read_cmd"
 }
 
 # Function to test a single case
@@ -478,13 +590,23 @@ if [ "$USE_AIG" -eq 1 ]; then
     echo ""
 fi
 
-# Initialize CSV file
-echo "Benchmark,Size_Nodes,ABC_Nodes,ABC_Edges,ABC_Levels,Total_LUTs,Total_Dual,LUT6D,LUT6,LUT5D,LUT5,LUT4D,LUT4,LUT3,LUT2,LEC_Status" > $TEST_DIR/results.csv
+# Initialize CSV file: preserve existing results for skip-if-done logic
+RESULTS_CSV="$TEST_DIR/results.csv"
+RESULTS_HEADER="Benchmark,Size_Nodes,ABC_Nodes,ABC_Edges,ABC_Levels,Total_LUTs,Total_Dual,LUT6D,LUT6,LUT5D,LUT5,LUT4D,LUT4,LUT3,LUT2,LEC_Status"
+if [ ! -f "$RESULTS_CSV" ] || ! head -1 "$RESULTS_CSV" | grep -q "^Benchmark,"; then
+    echo "$RESULTS_HEADER" > "$RESULTS_CSV"
+fi
 
 # Process tests in ascending size order, with group headers
 current_group=""
 failed_cases=0
 while IFS=',' read -r size_nodes lat_count test_case blif_path; do
+    # Skip if this test case already has a result in the CSV
+    if grep -q "^${test_case}," "$RESULTS_CSV"; then
+        echo -e "  ${YELLOW}Skipping $test_case (already processed)${NC}"
+        continue
+    fi
+
     group=$(group_for_nodes "$size_nodes")
     if [ "$group" != "$current_group" ]; then
         echo "================================================"

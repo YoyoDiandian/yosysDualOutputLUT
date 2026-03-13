@@ -1,0 +1,46 @@
+
+ /----------------------------------------------------------------------------\
+ |  yosys -- Yosys Open SYnthesis Suite                                       |
+ |  Copyright (C) 2012 - 2025  Claire Xenia Wolf <claire@yosyshq.com>         |
+ |  Distributed under an ISC-like license, type "license" to see terms        |
+ \----------------------------------------------------------------------------/
+ Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+
+-- Running command `
+        read_aiger /Users/yoyowang/Desktop/benchmark/log2.aig
+        hierarchy -check -auto-top
+        flatten
+        aigmap
+        write_aiger test_output_epfl/log2_lut6d_gold_cec.aig
+    ' --
+
+1. Executing AIGER frontend.
+<suppressed ~1 debug messages>
+Removed 0 unused cells and 64 unused wires.
+
+2. Executing HIERARCHY pass (managing design hierarchy).
+
+2.1. Finding top of design hierarchy..
+root of   0 design levels: /Users/yoyowang/Desktop/benchmark/log2.aig
+Automatically selected /Users/yoyowang/Desktop/benchmark/log2.aig as design top module.
+
+2.2. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/log2.aig
+
+2.3. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/log2.aig
+Removed 0 unused modules.
+
+3. Executing FLATTEN pass (flatten design).
+
+4. Executing AIGMAP pass (map logic to AIG).
+Module /Users/yoyowang/Desktop/benchmark/log2.aig: replaced 0 cells with 0 new cells, skipped 54494 cells.
+  not replaced 2 cell types:
+   32060 $_AND_
+   22434 $_NOT_
+
+5. Executing AIGER backend.
+
+End of script. Logfile hash: 1f77feda48, CPU: user 0.22s system 0.01s, MEM: 97.56 MB peak
+Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+Time spent: 54% 1x clean (0 sec), 15% 2x read_aiger (0 sec), ...

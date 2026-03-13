@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/square.aig; ps; if -K 6; ps; write_verilog test_output_epfl/square_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/square:[0m i/o =   64/  128  lat =    0  and =  18484  lev =250
+[1;37m/Users/yoyowang/Desktop/benchmark/square:[0m i/o =   64/  128  lat =    0  nd =  3997  edge =  16525  aig  = 35208  lev = 50

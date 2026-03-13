@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/i2c.aig; ps; if -K 6; ps; write_verilog test_output_epfl/i2c_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/i2c:[0m i/o =  147/  142  lat =    0  and =   1342  lev = 20
+[1;37m/Users/yoyowang/Desktop/benchmark/i2c:[0m i/o =  147/  142  lat =    0  nd =   365  edge =   1668  aig  =  1565  lev = 4

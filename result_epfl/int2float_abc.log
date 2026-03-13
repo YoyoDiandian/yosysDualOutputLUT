@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/int2float.aig; ps; if -K 6; ps; write_verilog test_output_epfl/int2float_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/int2float:[0m i/o =   11/    7  lat =    0  and =    260  lev = 16
+[1;37m/Users/yoyowang/Desktop/benchmark/int2float:[0m i/o =   11/    7  lat =    0  nd =    49  edge =    256  aig  =   291  lev = 3

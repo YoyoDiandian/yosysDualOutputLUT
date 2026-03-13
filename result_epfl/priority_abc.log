@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/priority.aig; ps; if -K 6; ps; write_verilog test_output_epfl/priority_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/priority:[0m i/o =  128/    8  lat =    0  and =    978  lev =250
+[1;37m/Users/yoyowang/Desktop/benchmark/priority:[0m i/o =  128/    8  lat =    0  nd =   219  edge =   1074  aig  =  1454  lev = 31

@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/div.aig; ps; if -K 6; ps; write_verilog test_output_epfl/div_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/div:[0m i/o =  128/  128  lat =    0  and =  57247  lev =4372
+[1;37m/Users/yoyowang/Desktop/benchmark/div:[0m i/o =  128/  128  lat =    0  nd = 22030  edge =  77705  aig  = 86045  lev = 864

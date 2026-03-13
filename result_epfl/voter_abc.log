@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/voter.aig; ps; if -K 6; ps; write_verilog test_output_epfl/voter_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/voter:[0m i/o = 1001/    1  lat =    0  and =  13758  lev = 70
+[1;37m/Users/yoyowang/Desktop/benchmark/voter:[0m i/o = 1001/    1  lat =    0  nd =  2826  edge =  13622  aig  = 38299  lev = 17

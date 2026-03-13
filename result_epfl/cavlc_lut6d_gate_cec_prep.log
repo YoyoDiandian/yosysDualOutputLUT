@@ -1,0 +1,1096 @@
+
+ /----------------------------------------------------------------------------\
+ |  yosys -- Yosys Open SYnthesis Suite                                       |
+ |  Copyright (C) 2012 - 2025  Claire Xenia Wolf <claire@yosyshq.com>         |
+ |  Distributed under an ISC-like license, type "license" to see terms        |
+ \----------------------------------------------------------------------------/
+ Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+
+-- Running command `
+        read_verilog -icells techlibs/yoyo/cells_sim.v
+        read_verilog test_output_epfl/cavlc_lut6d_mapped.v
+        hierarchy -check -auto-top
+        flatten
+        techmap
+        opt
+        aigmap
+        write_aiger test_output_epfl/cavlc_lut6d_gate_cec.aig
+    ' --
+
+1. Executing Verilog-2005 frontend: techlibs/yoyo/cells_sim.v
+Parsing Verilog input from `techlibs/yoyo/cells_sim.v' to AST representation.
+verilog frontend filename techlibs/yoyo/cells_sim.v
+Generating RTLIL representation for module `\GTP_LUT1'.
+Generating RTLIL representation for module `\GTP_LUT2'.
+Generating RTLIL representation for module `\GTP_LUT3'.
+Generating RTLIL representation for module `\GTP_LUT4'.
+Generating RTLIL representation for module `\GTP_LUT5'.
+Generating RTLIL representation for module `\GTP_LUT6'.
+Generating RTLIL representation for module `\GTP_LUT6D'.
+Generating RTLIL representation for module `\GTP_LUT5D'.
+Generating RTLIL representation for module `\GTP_LUT4D'.
+Successfully finished Verilog frontend.
+
+2. Executing Verilog-2005 frontend: test_output_epfl/cavlc_lut6d_mapped.v
+Parsing Verilog input from `test_output_epfl/cavlc_lut6d_mapped.v' to AST representation.
+verilog frontend filename test_output_epfl/cavlc_lut6d_mapped.v
+Generating RTLIL representation for module `\/Users/yoyowang/Desktop/benchmark/cavlc.aig'.
+Successfully finished Verilog frontend.
+
+3. Executing HIERARCHY pass (managing design hierarchy).
+Attribute `top' found on module `/Users/yoyowang/Desktop/benchmark/cavlc.aig'. Setting top module to /Users/yoyowang/Desktop/benchmark/cavlc.aig.
+
+3.1. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/cavlc.aig
+Used module:     \GTP_LUT6
+Used module:     \GTP_LUT5
+Used module:     \GTP_LUT4
+Used module:     \GTP_LUT3
+Used module:     \GTP_LUT6D
+Used module:     \GTP_LUT5D
+Used module:     \GTP_LUT4D
+Parameter \INIT = 64'0000000000000000000000000000000000000000000000000000000000010000
+
+3.2. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000000000000000000000000000000010000
+Generating RTLIL representation for module `$paramod$f79e2320780da9747722ebfe5757971ceb26f16f\GTP_LUT6'.
+Parameter \INIT = 64'0000100010111011000010000010101100000000101000010000100000011001
+
+3.3. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000100010111011000010000010101100000000101000010000100000011001
+Generating RTLIL representation for module `$paramod$42ce0eaced44a560db6950b7adae408b6b96c6aa\GTP_LUT6'.
+Parameter \INIT = 64'1100100000000000110000000000000011000000000000000000000000000000
+
+3.4. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1100100000000000110000000000000011000000000000000000000000000000
+Generating RTLIL representation for module `$paramod$6dd3ef315177c83acd8b7c6cfc9f92eb92759b01\GTP_LUT6'.
+Parameter \INIT = 64'1011101110111011111111111111111111111101111111011100110011011101
+
+3.5. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1011101110111011111111111111111111111101111111011100110011011101
+Generating RTLIL representation for module `$paramod$c17712a4539d6167acb75b36b4ca4f5fb54967ed\GTP_LUT6'.
+Parameter \INIT = 64'0111011101100110011101110111011100111111001110110001110100011001
+
+3.6. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0111011101100110011101110111011100111111001110110001110100011001
+Generating RTLIL representation for module `$paramod$b618f112ad39f5194af7e6b560686378d4584555\GTP_LUT6'.
+Parameter \INIT = 64'0000101000000000100011001000110000000000000000000000000000000000
+
+3.7. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000101000000000100011001000110000000000000000000000000000000000
+Generating RTLIL representation for module `$paramod$c06b00cea4d8a8a0b5e425a89d89a0672f7fb80b\GTP_LUT6'.
+Parameter \INIT = 64'1111000011110000111100001111000000110000101100000111000011110000
+
+3.8. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111000011110000111100001111000000110000101100000111000011110000
+Generating RTLIL representation for module `$paramod$03cf0a3f04f31c0b6cd16c887bde3b6342d9f7ab\GTP_LUT6'.
+Parameter \INIT = 64'1010111111111111101011111111111111111111111111111100110011111111
+
+3.9. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1010111111111111101011111111111111111111111111111100110011111111
+Generating RTLIL representation for module `$paramod$702b953395245086b47022a652694840b4253b0e\GTP_LUT6'.
+Parameter \INIT = 64'1111111111011101110111011101110111011101110111011100111111011101
+
+3.10. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111111011101110111011101110111011101110111011100111111011101
+Generating RTLIL representation for module `$paramod$59da8001f10c611fe03edf7f86f2365e77a53be6\GTP_LUT6'.
+Parameter \INIT = 64'0000011101111111000000110011111100000001011111110000000000011111
+
+3.11. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000011101111111000000110011111100000001011111110000000000011111
+Generating RTLIL representation for module `$paramod$7a4644c6c2d89c82f7a9a17ef43b321013b474b1\GTP_LUT6'.
+Parameter \INIT = 64'1111110000111101101111111001010111111111001111111111111111111111
+
+3.12. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111110000111101101111111001010111111111001111111111111111111111
+Generating RTLIL representation for module `$paramod$917c283221303c42cb8a746abe9639875d797906\GTP_LUT6'.
+Parameter \INIT = 64'0010000000001000000000000000100000000000000000000000000000000000
+
+3.13. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0010000000001000000000000000100000000000000000000000000000000000
+Generating RTLIL representation for module `$paramod$546ed2929d69abe482dba98b919c2444cc626c09\GTP_LUT6'.
+Parameter \INIT = 64'0000000010001100000000001100110010001000110011001100110011001100
+
+3.14. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000010001100000000001100110010001000110011001100110011001100
+Generating RTLIL representation for module `$paramod$837b0d4d0ee8911a73b10258d55ed33ff65c5577\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000110011001100110000000000000000000001010100000101
+
+3.15. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000110011001100110000000000000000000001010100000101
+Generating RTLIL representation for module `$paramod$7964b169f6b041aa9e6eb215aa29f269d7c11666\GTP_LUT6'.
+Parameter \INIT = 64'0000000000010000010101010101010000000000000000000100010001000100
+
+3.16. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000010000010101010101010000000000000000000100010001000100
+Generating RTLIL representation for module `$paramod$8b091bdfa70d3a26a91cd1753d26892af06918ce\GTP_LUT6'.
+Parameter \INIT = 64'0000000101010000000000000000000000000000000001000000000000000000
+
+3.17. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000101010000000000000000000000000000000001000000000000000000
+Generating RTLIL representation for module `$paramod$66348c8deb265d226349e78490f73a1614883e1c\GTP_LUT6'.
+Parameter \INIT = 64'1000000000001000000000000000000001000000000001000000000000000000
+
+3.18. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1000000000001000000000000000000001000000000001000000000000000000
+Generating RTLIL representation for module `$paramod$764c9f086cfaacc514d167d1ad29c1d5c4ee1b4a\GTP_LUT6'.
+Parameter \INIT = 64'1111011111110111111101111111011111100111111001011111011111110101
+
+3.19. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111011111110111111101111111011111100111111001011111011111110101
+Generating RTLIL representation for module `$paramod$a783f7658c0f066839e6913053f84e4b1d41c790\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000000000000011110100000000001011010
+
+3.20. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000000000000011110100000000001011010
+Generating RTLIL representation for module `$paramod$1c0f03f390fcb7d509cb4b0d8dbf43c45f84f8c3\GTP_LUT6'.
+Parameter \INIT = 64'1000100000001101101010100000111110001100101011001000110110101111
+
+3.21. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1000100000001101101010100000111110001100101011001000110110101111
+Generating RTLIL representation for module `$paramod$7e622e7a9f1d0da957f4d8a42c55c5930dbf86e3\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000111111111111111111100000000000001111111110111111111
+
+3.22. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000111111111111111111100000000000001111111110111111111
+Generating RTLIL representation for module `$paramod$fac1c7a68935fb0c27cea8109b4fed739243ec2b\GTP_LUT6'.
+Parameter \INIT = 64'1101010101110101110101010111010111110101111110101111010111111111
+
+3.23. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1101010101110101110101010111010111110101111110101111010111111111
+Generating RTLIL representation for module `$paramod$0befe0e4adef1c9acbd37634ec98bd2eb57b4dbb\GTP_LUT6'.
+Parameter \INIT = 64'1101110000000000010101000000000011001100000000001100110000000000
+
+3.24. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1101110000000000010101000000000011001100000000001100110000000000
+Generating RTLIL representation for module `$paramod$ad6b8728917f1e119836ae7b20127dc6d24516b8\GTP_LUT6'.
+Parameter \INIT = 64'1100111111001111100001010000111111101111111101011100111111110101
+
+3.25. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1100111111001111100001010000111111101111111101011100111111110101
+Generating RTLIL representation for module `$paramod$309991c32eb1f8b8e0d4f490f8c9c224dd600612\GTP_LUT6'.
+Parameter \INIT = 32'10001010110110111110111111101111
+
+3.26. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'10001010110110111110111111101111
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'10001010110110111110111111101111'.
+Parameter \INIT = 32'11111111101110111001101111111111
+
+3.27. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11111111101110111001101111111111
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11111111101110111001101111111111'.
+Parameter \INIT = 32'11111111001100111101111100010011
+
+3.28. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11111111001100111101111100010011
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11111111001100111101111100010011'.
+Parameter \INIT = 32'11000000111101011100000011010101
+
+3.29. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11000000111101011100000011010101
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11000000111101011100000011010101'.
+Parameter \INIT = 64'1111111111111111000100000001000111111111101111110001000000010001
+
+3.30. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111111000100000001000111111111101111110001000000010001
+Generating RTLIL representation for module `$paramod$8444a219dde771365123fb5d07382f4e06b8f29f\GTP_LUT6'.
+Parameter \INIT = 64'0000111100000101000011110000111100001100000011000000110000001100
+
+3.31. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000111100000101000011110000111100001100000011000000110000001100
+Generating RTLIL representation for module `$paramod$989fbcf9d3fc84b4b68cd4c00120ad5397ecab1e\GTP_LUT6'.
+Parameter \INIT = 64'0101010111111111010101001111110000010101001111110001010000111100
+
+3.32. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0101010111111111010101001111110000010101001111110001010000111100
+Generating RTLIL representation for module `$paramod$1e49d785005d54e8cc657855fefbaac5f2211b14\GTP_LUT6'.
+Parameter \INIT = 64'0000000011001111000000000100010100000000111111110000000001010101
+
+3.33. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000011001111000000000100010100000000111111110000000001010101
+Generating RTLIL representation for module `$paramod$e69a9b267f0616575ed7bc16e6267928d5c77b14\GTP_LUT6'.
+Parameter \INIT = 64'0001000100000001000100010001000100000000000000000001000100010001
+
+3.34. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0001000100000001000100010001000100000000000000000001000100010001
+Generating RTLIL representation for module `$paramod$ad7d904a2b4d070e9b7f9f02f6a8eb526397a38c\GTP_LUT6'.
+Parameter \INIT = 64'0000000000010001000000000001000100000000000100010000000000000001
+
+3.35. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000010001000000000001000100000000000100010000000000000001
+Generating RTLIL representation for module `$paramod$b5cfe2c18704430b3b95ce63612d3f70fe929edb\GTP_LUT6'.
+Parameter \INIT = 64'0011111111110011110011111111111100111111111111111100111111011101
+
+3.36. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0011111111110011110011111111111100111111111111111100111111011101
+Generating RTLIL representation for module `$paramod$fa5f6645900a2ce626243d7c945b1a64bffdde6f\GTP_LUT6'.
+Parameter \INIT = 64'0111001101110011111100111111001111110011111100111111001111110111
+
+3.37. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0111001101110011111100111111001111110011111100111111001111110111
+Generating RTLIL representation for module `$paramod$7f8716c9d15c5dbb86a756872cb5511d07309420\GTP_LUT6'.
+Parameter \INIT = 64'1000000000000000000000000000000000100000001000000010100000101000
+
+3.38. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1000000000000000000000000000000000100000001000000010100000101000
+Generating RTLIL representation for module `$paramod$435d7a22e09340367a1e4724fb2e834216c88dac\GTP_LUT6'.
+Parameter \INIT = 64'1100111111001111100010101000111111111111111111111111111110001111
+
+3.39. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1100111111001111100010101000111111111111111111111111111110001111
+Generating RTLIL representation for module `$paramod$1c59a15b83e2e317cda365d984e848a8ea5ff6d3\GTP_LUT6'.
+Parameter \INIT = 64'0000000001010100010000000100000000000000000000000000000000000000
+
+3.40. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000001010100010000000100000000000000000000000000000000000000
+Generating RTLIL representation for module `$paramod$a2c1e11061410a2d87fa0c6a664a47534aaaf722\GTP_LUT6'.
+Parameter \INIT = 64'1111111111110111111111111111011111110101001111111111111111111111
+
+3.41. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111111110111111111111111011111110101001111111111111111111111
+Generating RTLIL representation for module `$paramod$aab4d337b95ca70cdb9133a8d91d64744210dfb5\GTP_LUT6'.
+Parameter \INIT = 64'0010011110101111001001111010111110101111111111111010010111010101
+
+3.42. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0010011110101111001001111010111110101111111111111010010111010101
+Generating RTLIL representation for module `$paramod$b06b596ce96ba6c1f0f4f6b66be82a9fb71dc76b\GTP_LUT6'.
+Parameter \INIT = 64'1101000101110001110111010011111111111101001101011111111100110000
+
+3.43. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1101000101110001110111010011111111111101001101011111111100110000
+Generating RTLIL representation for module `$paramod$88fa6e7a755c6e98092c8f3afe5d35483a5a8851\GTP_LUT6'.
+Parameter \INIT = 64'0010001111111111001100111100001100010001111011111010111011101110
+
+3.44. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0010001111111111001100111100001100010001111011111010111011101110
+Generating RTLIL representation for module `$paramod$7621e2ee885c62e5f041c4b42ecdc0a50de0493f\GTP_LUT6'.
+Parameter \INIT = 64'1111110111111101100000111111111111000010111101111000101110111011
+
+3.45. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111110111111101100000111111111111000010111101111000101110111011
+Generating RTLIL representation for module `$paramod$4e06ba89c28486c739dc5ce38bac0a6fc5dd7abf\GTP_LUT6'.
+Parameter \INIT = 64'0001001111111111001111111111111100111111111111110001001101111111
+
+3.46. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0001001111111111001111111111111100111111111111110001001101111111
+Generating RTLIL representation for module `$paramod$4e07ad2c67932ca1420b785fde6d5a6c48ca3842\GTP_LUT6'.
+Parameter \INIT = 64'1111110000111011111111110000101111111110110011101111111111000011
+
+3.47. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111110000111011111111110000101111111110110011101111111111000011
+Generating RTLIL representation for module `$paramod$5ad723d187ad15dc26f3ae2656be20ef41dec880\GTP_LUT6'.
+Parameter \INIT = 64'1100110000000011110011000000001100001000001000100000110100100011
+
+3.48. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1100110000000011110011000000001100001000001000100000110100100011
+Generating RTLIL representation for module `$paramod$5d868c4fc5beab741567845254b52431aad03116\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111011001100110011001111111111111111001101110111011100
+
+3.49. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111011001100110011001111111111111111001101110111011100
+Generating RTLIL representation for module `$paramod$35fc7f62298a3215639de86a2fd5dec8bd79a04a\GTP_LUT6'.
+Parameter \INIT = 64'0011001101111011101110111111111111111011111110111110001111100011
+
+3.50. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0011001101111011101110111111111111111011111110111110001111100011
+Generating RTLIL representation for module `$paramod$2cbecf3a29bcdeaa5ca10271473ee0909e90297c\GTP_LUT6'.
+Parameter \INIT = 64'1100000011111101111100001111111111110000111110001111001111111011
+
+3.51. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1100000011111101111100001111111111110000111110001111001111111011
+Generating RTLIL representation for module `$paramod$c1469613ecbb3e6311528b8a1bc2d0c0bc03c3ee\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111111111001111111111111100011111011111110010111101111
+
+3.52. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111111111111111001111111111111100011111011111110010111101111
+Generating RTLIL representation for module `$paramod$a8a1e06098e0bf397a91615c3f04416ca34e1c39\GTP_LUT6'.
+Parameter \INIT = 64'1010101110101011111111111111111111111111111111111110111111001100
+
+3.53. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1010101110101011111111111111111111111111111111111110111111001100
+Generating RTLIL representation for module `$paramod$aba05e1238a5fdc9ef97c74372660e2a0c4d1275\GTP_LUT6'.
+Parameter \INIT = 64'0000110100001111011111011111110110001100110011010011111000111110
+
+3.54. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000110100001111011111011111110110001100110011010011111000111110
+Generating RTLIL representation for module `$paramod$f6dbff9a3594541b5f746d11566564347913d45f\GTP_LUT6'.
+Parameter \INIT = 64'1100110011001110110011001110011111001100111001111100110011110111
+
+3.55. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1100110011001110110011001110011111001100111001111100110011110111
+Generating RTLIL representation for module `$paramod$5671d7dc81cb6ca746a1fad85f535565d5691c61\GTP_LUT6'.
+Parameter \INIT = 64'0000000010100000000000001010000000000000000010100000000000001100
+
+3.56. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000010100000000000001010000000000000000010100000000000001100
+Generating RTLIL representation for module `$paramod$b3d54be374c9a3c67041a7bc3be72c5043de7cb2\GTP_LUT6'.
+Parameter \INIT = 252512776
+
+3.57. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 252512776
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00001111000011010000101000001000'.
+Parameter \INIT = 5505024
+
+3.58. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 5505024
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000000010101000000000000000000'.
+Parameter \INIT = 857748224
+
+3.59. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 857748224
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00110011001000000011001100000000'.
+Parameter \INIT = 32'11111111000000010000000000000001
+
+3.60. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11111111000000010000000000000001
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11111111000000010000000000000001'.
+Parameter \INIT = 2147155968
+
+3.61. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 2147155968
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'01111111111110110000000000000000'.
+Parameter \INIT = 1
+
+3.62. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 1
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000000000000000000000000000001'.
+Parameter \INIT = 32'11111101000110111111110111111111
+
+3.63. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11111101000110111111110111111111
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11111101000110111111110111111111'.
+Parameter \INIT = 789508
+
+3.64. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 789508
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00000000000011000000110000000100'.
+Parameter \INIT = 16'0000110000001000
+
+3.65. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4'.
+Parameter \INIT = 16'0000110000001000
+Generating RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'0000110000001000'.
+Parameter \INIT = 16'0000000100000000
+
+3.66. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4'.
+Parameter \INIT = 16'0000000100000000
+Generating RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'0000000100000000'.
+Parameter \INIT = 16'1111111000000000
+
+3.67. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4'.
+Parameter \INIT = 16'1111111000000000
+Generating RTLIL representation for module `$paramod\GTP_LUT4\INIT=16'1111111000000000'.
+Parameter \INIT = 64'0000000010101111111111111111111101000100111011111111111111111111
+
+3.68. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000010101111111111111111111101000100111011111111111111111111
+Generating RTLIL representation for module `$paramod$49293a3aef667995a2c3c6c6b56dc8a77c8530c8\GTP_LUT6'.
+Parameter \INIT = 64'1111111110111011101010101010101011111111101011111010101010101010
+
+3.69. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111110111011101010101010101011111111101011111010101010101010
+Generating RTLIL representation for module `$paramod$6c089c60bb52d37c464e9a014e2eca2a656714e4\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000011111111111111111111111111111110
+
+3.70. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000011111111111111111111111111111110
+Generating RTLIL representation for module `$paramod$cce3bb293c6c6fbf56fd6cf4217944155b7626f3\GTP_LUT6'.
+Parameter \INIT = 64'1111000011110011111100001111011100000000000000000000000000000000
+
+3.71. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111000011110011111100001111011100000000000000000000000000000000
+Generating RTLIL representation for module `$paramod$d2dbb9108e7f5b5857387fb809c307b4d284103e\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000000010001000000010001000000000000
+
+3.72. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000000010001000000010001000000000000
+Generating RTLIL representation for module `$paramod$6cce0440d6e8cb8db42ef5c29b3549eb804f54d6\GTP_LUT6'.
+Parameter \INIT = 64'0000111100001111000011110000111100001111000010100000110000001000
+
+3.73. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000111100001111000011110000111100001111000010100000110000001000
+Generating RTLIL representation for module `$paramod$8be9e42a6dc3558b88c5dd00c53d3b26c0197121\GTP_LUT6'.
+Parameter \INIT = 64'0001101111110000000000001111111100110011111100000000000011111111
+
+3.74. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0001101111110000000000001111111100110011111100000000000011111111
+Generating RTLIL representation for module `$paramod$e3fac8e3397f60033236070261231b5de5f40efc\GTP_LUT6'.
+Parameter \INIT = 1879078656
+
+3.75. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 1879078656
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'01110000000000000111011100000000'.
+Parameter \INIT = 64'0000000000001010010101010101111100100010001010100111011101111111
+
+3.76. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000001010010101010101111100100010001010100111011101111111
+Generating RTLIL representation for module `$paramod$784efd17857e29b0cb94577cd206d0e512239b5b\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000011110000010100100000001000000010110100100101
+
+3.77. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000011110000010100100000001000000010110100100101
+Generating RTLIL representation for module `$paramod$5daebce6715754a5a3dac04dd27e8df9a09bd45d\GTP_LUT6'.
+Parameter \INIT = 32'11111111111111100101010101010100
+
+3.78. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11111111111111100101010101010100
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11111111111111100101010101010100'.
+Parameter \INIT = 64'1111000011110000110100111101000011110011111111001111000011110011
+
+3.79. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111000011110000110100111101000011110011111111001111000011110011
+Generating RTLIL representation for module `$paramod$b0b37afa29fdbe640b002b78041873b231006b45\GTP_LUT6'.
+Parameter \INIT = 64'0000000010000000000000000000000000000000000000000000100000001000
+
+3.80. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000010000000000000000000000000000000000000000000100000001000
+Generating RTLIL representation for module `$paramod$68e092ef1aef4c12a3f56552642dc2d1793855a0\GTP_LUT6'.
+Parameter \INIT = 64'1111111100010011010111110101111111111111000100011111111101011111
+
+3.81. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111111100010011010111110101111111111111000100011111111101011111
+Generating RTLIL representation for module `$paramod$45933e7d2f5a288be82b1062e2e45399018a4204\GTP_LUT6'.
+Parameter \INIT = 64'1111011111111111111011111110111111101011111110111110000011101011
+
+3.82. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111011111111111111011111110111111101011111110111110000011101011
+Generating RTLIL representation for module `$paramod$e9a1f9cc05b223201e117c6e9ca7405833555970\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000011111111111111111111111101111111
+
+3.83. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000000000011111111111111111111111101111111
+Generating RTLIL representation for module `$paramod$341f347a2ba9cc54ac961eeb62b0b7bebaa63353\GTP_LUT6'.
+Parameter \INIT = 64'0000000000011000000000000001110000000000000111000000000000011110
+
+3.84. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000011000000000000001110000000000000111000000000000011110
+Generating RTLIL representation for module `$paramod$08409ed8435449a44b6a94de4af83b8e994739de\GTP_LUT6'.
+Parameter \INIT = 598716335
+
+3.85. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 598716335
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00100011101011111010111110101111'.
+Parameter \INIT = 32'11001101110011111100111111001111
+
+3.86. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11001101110011111100111111001111
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11001101110011111100111111001111'.
+Parameter \INIT = 8'00001000
+
+3.87. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT3'.
+Parameter \INIT = 8'00001000
+Generating RTLIL representation for module `$paramod\GTP_LUT3\INIT=8'00001000'.
+Parameter \INIT = 8'01000000
+
+3.88. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT3'.
+Parameter \INIT = 8'01000000
+Generating RTLIL representation for module `$paramod\GTP_LUT3\INIT=8'01000000'.
+Parameter \INIT = 64'0000000000000000000000000101010111110000111100111111000011110111
+
+3.89. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000000000000000000101010111110000111100111111000011110111
+Generating RTLIL representation for module `$paramod$7adbd24b70053a7fcb9f40abd9fab557f3f5160e\GTP_LUT6'.
+Parameter \INIT = 64'1111000000010000111111110001000111110000110000001111111111001100
+
+3.90. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1111000000010000111111110001000111110000110000001111111111001100
+Generating RTLIL representation for module `$paramod$06e9396e7a75db98978af6e6c0fcc2a62edbf7b2\GTP_LUT6'.
+Parameter \INIT = 64'0111000101110001001100010111000111110001111100011111000111110001
+
+3.91. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0111000101110001001100010111000111110001111100011111000111110001
+Generating RTLIL representation for module `$paramod$081a0ce1ed7b7190532bd53d8a28e50b844fa072\GTP_LUT6'.
+Parameter \INIT = 2134839055
+
+3.92. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 2134839055
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'01111111001111110000111100001111'.
+Parameter \INIT = 134908074
+
+3.93. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 134908074
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00001000000010101000100010101010'.
+Parameter \INIT = 32'11101111010111110000111100001111
+
+3.94. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11101111010111110000111100001111
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11101111010111110000111100001111'.
+Parameter \INIT = 805384449
+
+3.95. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 805384449
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'00110000000000010011000100000001'.
+Parameter \INIT = 64'1011101110111010000000000000000000000000000000000000000000000000
+
+3.96. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'1011101110111010000000000000000000000000000000000000000000000000
+Generating RTLIL representation for module `$paramod$8950263da2595f45577ed28b680f399a8c34ef3c\GTP_LUT6'.
+Parameter \INIT = 64'0000000000010100000000000000000000000000000010100000000000000000
+
+3.97. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000010100000000000000000000000000000010100000000000000000
+Generating RTLIL representation for module `$paramod$7d523dbf684a6eb478f3e9c70a7a0645ba7c50ab\GTP_LUT6'.
+Parameter \INIT = 64'0000000000011000000000000000000000000000000011000000000000000000
+
+3.98. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6'.
+Parameter \INIT = 64'0000000000011000000000000000000000000000000011000000000000000000
+Generating RTLIL representation for module `$paramod$1195691caf5e15bb2cd07c06e61549151ff62318\GTP_LUT6'.
+Parameter \INIT = 32'11100000000000000010000000000000
+
+3.99. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5'.
+Parameter \INIT = 32'11100000000000000010000000000000
+Generating RTLIL representation for module `$paramod\GTP_LUT5\INIT=32'11100000000000000010000000000000'.
+Parameter \INIT = 64'1111001011110011111111110000000000100011001000110000000000000000
+
+3.100. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'1111001011110011111111110000000000100011001000110000000000000000
+Generating RTLIL representation for module `$paramod$da12b6242789738f0f58cbdd86be251ce0816178\GTP_LUT6D'.
+Parameter \INIT = 67371023
+
+3.101. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 67371023
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'00000100000001000000000000001111'.
+Parameter \INIT = 64'0101001111110011111111110000111100000000000000000000111100001111
+
+3.102. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'0101001111110011111111110000111100000000000000000000111100001111
+Generating RTLIL representation for module `$paramod$c027fa64a29e71f88060ec15d054230cf6f7c34d\GTP_LUT6D'.
+Parameter \INIT = 64'1010000010101000000000000000000011111111000000000000000000000000
+
+3.103. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'1010000010101000000000000000000011111111000000000000000000000000
+Generating RTLIL representation for module `$paramod$777a80276501f95eeb3a05e4094eaede6475dbeb\GTP_LUT6D'.
+Parameter \INIT = 64'0010001000100000000000000010000001111111110101010111111111000011
+
+3.104. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'0010001000100000000000000010000001111111110101010111111111000011
+Generating RTLIL representation for module `$paramod$518294938c088411c4cb68b9b6803014cd150a78\GTP_LUT6D'.
+Parameter \INIT = 32'10001000110011000000111100000000
+
+3.105. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT5D'.
+Parameter \INIT = 32'10001000110011000000111100000000
+Generating RTLIL representation for module `$paramod\GTP_LUT5D\INIT=32'10001000110011000000111100000000'.
+Parameter \INIT = 64'0000000000100010000000000010001000000011000000110000000000000000
+
+3.106. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'0000000000100010000000000010001000000011000000110000000000000000
+Generating RTLIL representation for module `$paramod$2ddfdd844b097ed4080b4e60728a6d23eed8753c\GTP_LUT6D'.
+Parameter \INIT = 64'0000000001010000111111111111110100010001000100010001000100010001
+
+3.107. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'0000000001010000111111111111110100010001000100010001000100010001
+Generating RTLIL representation for module `$paramod$938194ea68ff53d0a40772b0d1e6f5c3374f734e\GTP_LUT6D'.
+Parameter \INIT = 64'0000000000001111000000000000111100100000001000000000000000000000
+
+3.108. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT6D'.
+Parameter \INIT = 64'0000000000001111000000000000111100100000001000000000000000000000
+Generating RTLIL representation for module `$paramod$379bbe786981c6c3b74a1700e5e8dd93e4806f0b\GTP_LUT6D'.
+Parameter \INIT = 16'0001000110001000
+
+3.109. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4D'.
+Parameter \INIT = 16'0001000110001000
+Generating RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'0001000110001000'.
+Parameter \INIT = 16'1000100000010001
+
+3.110. Executing AST frontend in derive mode using pre-parsed AST for module `\GTP_LUT4D'.
+Parameter \INIT = 16'1000100000010001
+Generating RTLIL representation for module `$paramod\GTP_LUT4D\INIT=16'1000100000010001'.
+
+3.111. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/cavlc.aig
+Used module:     $paramod$f79e2320780da9747722ebfe5757971ceb26f16f\GTP_LUT6
+Used module:     $paramod$42ce0eaced44a560db6950b7adae408b6b96c6aa\GTP_LUT6
+Used module:     $paramod$6dd3ef315177c83acd8b7c6cfc9f92eb92759b01\GTP_LUT6
+Used module:     $paramod$c17712a4539d6167acb75b36b4ca4f5fb54967ed\GTP_LUT6
+Used module:     $paramod$b618f112ad39f5194af7e6b560686378d4584555\GTP_LUT6
+Used module:     $paramod$c06b00cea4d8a8a0b5e425a89d89a0672f7fb80b\GTP_LUT6
+Used module:     $paramod$03cf0a3f04f31c0b6cd16c887bde3b6342d9f7ab\GTP_LUT6
+Used module:     $paramod$702b953395245086b47022a652694840b4253b0e\GTP_LUT6
+Used module:     $paramod$59da8001f10c611fe03edf7f86f2365e77a53be6\GTP_LUT6
+Used module:     $paramod$7a4644c6c2d89c82f7a9a17ef43b321013b474b1\GTP_LUT6
+Used module:     $paramod$917c283221303c42cb8a746abe9639875d797906\GTP_LUT6
+Used module:     $paramod$546ed2929d69abe482dba98b919c2444cc626c09\GTP_LUT6
+Used module:     $paramod$837b0d4d0ee8911a73b10258d55ed33ff65c5577\GTP_LUT6
+Used module:     $paramod$7964b169f6b041aa9e6eb215aa29f269d7c11666\GTP_LUT6
+Used module:     $paramod$8b091bdfa70d3a26a91cd1753d26892af06918ce\GTP_LUT6
+Used module:     $paramod$66348c8deb265d226349e78490f73a1614883e1c\GTP_LUT6
+Used module:     $paramod$764c9f086cfaacc514d167d1ad29c1d5c4ee1b4a\GTP_LUT6
+Used module:     $paramod$a783f7658c0f066839e6913053f84e4b1d41c790\GTP_LUT6
+Used module:     $paramod$1c0f03f390fcb7d509cb4b0d8dbf43c45f84f8c3\GTP_LUT6
+Used module:     $paramod$7e622e7a9f1d0da957f4d8a42c55c5930dbf86e3\GTP_LUT6
+Used module:     $paramod$fac1c7a68935fb0c27cea8109b4fed739243ec2b\GTP_LUT6
+Used module:     $paramod$0befe0e4adef1c9acbd37634ec98bd2eb57b4dbb\GTP_LUT6
+Used module:     $paramod$ad6b8728917f1e119836ae7b20127dc6d24516b8\GTP_LUT6
+Used module:     $paramod$309991c32eb1f8b8e0d4f490f8c9c224dd600612\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'10001010110110111110111111101111
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111101110111001101111111111
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111001100111101111100010011
+Used module:     $paramod\GTP_LUT5\INIT=32'11000000111101011100000011010101
+Used module:     $paramod$8444a219dde771365123fb5d07382f4e06b8f29f\GTP_LUT6
+Used module:     $paramod$989fbcf9d3fc84b4b68cd4c00120ad5397ecab1e\GTP_LUT6
+Used module:     $paramod$1e49d785005d54e8cc657855fefbaac5f2211b14\GTP_LUT6
+Used module:     $paramod$e69a9b267f0616575ed7bc16e6267928d5c77b14\GTP_LUT6
+Used module:     $paramod$ad7d904a2b4d070e9b7f9f02f6a8eb526397a38c\GTP_LUT6
+Used module:     $paramod$b5cfe2c18704430b3b95ce63612d3f70fe929edb\GTP_LUT6
+Used module:     $paramod$fa5f6645900a2ce626243d7c945b1a64bffdde6f\GTP_LUT6
+Used module:     $paramod$7f8716c9d15c5dbb86a756872cb5511d07309420\GTP_LUT6
+Used module:     $paramod$435d7a22e09340367a1e4724fb2e834216c88dac\GTP_LUT6
+Used module:     $paramod$1c59a15b83e2e317cda365d984e848a8ea5ff6d3\GTP_LUT6
+Used module:     $paramod$a2c1e11061410a2d87fa0c6a664a47534aaaf722\GTP_LUT6
+Used module:     $paramod$aab4d337b95ca70cdb9133a8d91d64744210dfb5\GTP_LUT6
+Used module:     $paramod$b06b596ce96ba6c1f0f4f6b66be82a9fb71dc76b\GTP_LUT6
+Used module:     $paramod$88fa6e7a755c6e98092c8f3afe5d35483a5a8851\GTP_LUT6
+Used module:     $paramod$7621e2ee885c62e5f041c4b42ecdc0a50de0493f\GTP_LUT6
+Used module:     $paramod$4e06ba89c28486c739dc5ce38bac0a6fc5dd7abf\GTP_LUT6
+Used module:     $paramod$4e07ad2c67932ca1420b785fde6d5a6c48ca3842\GTP_LUT6
+Used module:     $paramod$5ad723d187ad15dc26f3ae2656be20ef41dec880\GTP_LUT6
+Used module:     $paramod$5d868c4fc5beab741567845254b52431aad03116\GTP_LUT6
+Used module:     $paramod$35fc7f62298a3215639de86a2fd5dec8bd79a04a\GTP_LUT6
+Used module:     $paramod$2cbecf3a29bcdeaa5ca10271473ee0909e90297c\GTP_LUT6
+Used module:     $paramod$c1469613ecbb3e6311528b8a1bc2d0c0bc03c3ee\GTP_LUT6
+Used module:     $paramod$a8a1e06098e0bf397a91615c3f04416ca34e1c39\GTP_LUT6
+Used module:     $paramod$aba05e1238a5fdc9ef97c74372660e2a0c4d1275\GTP_LUT6
+Used module:     $paramod$f6dbff9a3594541b5f746d11566564347913d45f\GTP_LUT6
+Used module:     $paramod$5671d7dc81cb6ca746a1fad85f535565d5691c61\GTP_LUT6
+Used module:     $paramod$b3d54be374c9a3c67041a7bc3be72c5043de7cb2\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'00001111000011010000101000001000
+Used module:     $paramod\GTP_LUT5\INIT=32'00000000010101000000000000000000
+Used module:     $paramod\GTP_LUT5\INIT=32'00110011001000000011001100000000
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111000000010000000000000001
+Used module:     $paramod\GTP_LUT5\INIT=32'01111111111110110000000000000000
+Used module:     $paramod\GTP_LUT5\INIT=32'00000000000000000000000000000001
+Used module:     $paramod\GTP_LUT5\INIT=32'11111101000110111111110111111111
+Used module:     $paramod\GTP_LUT5\INIT=32'00000000000011000000110000000100
+Used module:     $paramod\GTP_LUT4\INIT=16'0000110000001000
+Used module:     $paramod\GTP_LUT4\INIT=16'0000000100000000
+Used module:     $paramod\GTP_LUT4\INIT=16'1111111000000000
+Used module:     $paramod$49293a3aef667995a2c3c6c6b56dc8a77c8530c8\GTP_LUT6
+Used module:     $paramod$6c089c60bb52d37c464e9a014e2eca2a656714e4\GTP_LUT6
+Used module:     $paramod$cce3bb293c6c6fbf56fd6cf4217944155b7626f3\GTP_LUT6
+Used module:     $paramod$d2dbb9108e7f5b5857387fb809c307b4d284103e\GTP_LUT6
+Used module:     $paramod$6cce0440d6e8cb8db42ef5c29b3549eb804f54d6\GTP_LUT6
+Used module:     $paramod$8be9e42a6dc3558b88c5dd00c53d3b26c0197121\GTP_LUT6
+Used module:     $paramod$e3fac8e3397f60033236070261231b5de5f40efc\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'01110000000000000111011100000000
+Used module:     $paramod$784efd17857e29b0cb94577cd206d0e512239b5b\GTP_LUT6
+Used module:     $paramod$5daebce6715754a5a3dac04dd27e8df9a09bd45d\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111111111100101010101010100
+Used module:     $paramod$b0b37afa29fdbe640b002b78041873b231006b45\GTP_LUT6
+Used module:     $paramod$68e092ef1aef4c12a3f56552642dc2d1793855a0\GTP_LUT6
+Used module:     $paramod$45933e7d2f5a288be82b1062e2e45399018a4204\GTP_LUT6
+Used module:     $paramod$e9a1f9cc05b223201e117c6e9ca7405833555970\GTP_LUT6
+Used module:     $paramod$341f347a2ba9cc54ac961eeb62b0b7bebaa63353\GTP_LUT6
+Used module:     $paramod$08409ed8435449a44b6a94de4af83b8e994739de\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'00100011101011111010111110101111
+Used module:     $paramod\GTP_LUT5\INIT=32'11001101110011111100111111001111
+Used module:     $paramod\GTP_LUT3\INIT=8'00001000
+Used module:     $paramod\GTP_LUT3\INIT=8'01000000
+Used module:     $paramod$7adbd24b70053a7fcb9f40abd9fab557f3f5160e\GTP_LUT6
+Used module:     $paramod$06e9396e7a75db98978af6e6c0fcc2a62edbf7b2\GTP_LUT6
+Used module:     $paramod$081a0ce1ed7b7190532bd53d8a28e50b844fa072\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'01111111001111110000111100001111
+Used module:     $paramod\GTP_LUT5\INIT=32'00001000000010101000100010101010
+Used module:     $paramod\GTP_LUT5\INIT=32'11101111010111110000111100001111
+Used module:     $paramod\GTP_LUT5\INIT=32'00110000000000010011000100000001
+Used module:     $paramod$8950263da2595f45577ed28b680f399a8c34ef3c\GTP_LUT6
+Used module:     $paramod$7d523dbf684a6eb478f3e9c70a7a0645ba7c50ab\GTP_LUT6
+Used module:     $paramod$1195691caf5e15bb2cd07c06e61549151ff62318\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'11100000000000000010000000000000
+Used module:     $paramod$da12b6242789738f0f58cbdd86be251ce0816178\GTP_LUT6D
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000100000001000000000000001111
+Used module:     $paramod$c027fa64a29e71f88060ec15d054230cf6f7c34d\GTP_LUT6D
+Used module:     $paramod$777a80276501f95eeb3a05e4094eaede6475dbeb\GTP_LUT6D
+Used module:     $paramod$518294938c088411c4cb68b9b6803014cd150a78\GTP_LUT6D
+Used module:     $paramod\GTP_LUT5D\INIT=32'10001000110011000000111100000000
+Used module:     $paramod$2ddfdd844b097ed4080b4e60728a6d23eed8753c\GTP_LUT6D
+Used module:     $paramod$938194ea68ff53d0a40772b0d1e6f5c3374f734e\GTP_LUT6D
+Used module:     $paramod$379bbe786981c6c3b74a1700e5e8dd93e4806f0b\GTP_LUT6D
+Used module:     $paramod\GTP_LUT4D\INIT=16'0001000110001000
+Used module:     $paramod\GTP_LUT4D\INIT=16'1000100000010001
+
+3.112. Analyzing design hierarchy..
+Top module:  \/Users/yoyowang/Desktop/benchmark/cavlc.aig
+Used module:     $paramod$f79e2320780da9747722ebfe5757971ceb26f16f\GTP_LUT6
+Used module:     $paramod$42ce0eaced44a560db6950b7adae408b6b96c6aa\GTP_LUT6
+Used module:     $paramod$6dd3ef315177c83acd8b7c6cfc9f92eb92759b01\GTP_LUT6
+Used module:     $paramod$c17712a4539d6167acb75b36b4ca4f5fb54967ed\GTP_LUT6
+Used module:     $paramod$b618f112ad39f5194af7e6b560686378d4584555\GTP_LUT6
+Used module:     $paramod$c06b00cea4d8a8a0b5e425a89d89a0672f7fb80b\GTP_LUT6
+Used module:     $paramod$03cf0a3f04f31c0b6cd16c887bde3b6342d9f7ab\GTP_LUT6
+Used module:     $paramod$702b953395245086b47022a652694840b4253b0e\GTP_LUT6
+Used module:     $paramod$59da8001f10c611fe03edf7f86f2365e77a53be6\GTP_LUT6
+Used module:     $paramod$7a4644c6c2d89c82f7a9a17ef43b321013b474b1\GTP_LUT6
+Used module:     $paramod$917c283221303c42cb8a746abe9639875d797906\GTP_LUT6
+Used module:     $paramod$546ed2929d69abe482dba98b919c2444cc626c09\GTP_LUT6
+Used module:     $paramod$837b0d4d0ee8911a73b10258d55ed33ff65c5577\GTP_LUT6
+Used module:     $paramod$7964b169f6b041aa9e6eb215aa29f269d7c11666\GTP_LUT6
+Used module:     $paramod$8b091bdfa70d3a26a91cd1753d26892af06918ce\GTP_LUT6
+Used module:     $paramod$66348c8deb265d226349e78490f73a1614883e1c\GTP_LUT6
+Used module:     $paramod$764c9f086cfaacc514d167d1ad29c1d5c4ee1b4a\GTP_LUT6
+Used module:     $paramod$a783f7658c0f066839e6913053f84e4b1d41c790\GTP_LUT6
+Used module:     $paramod$1c0f03f390fcb7d509cb4b0d8dbf43c45f84f8c3\GTP_LUT6
+Used module:     $paramod$7e622e7a9f1d0da957f4d8a42c55c5930dbf86e3\GTP_LUT6
+Used module:     $paramod$fac1c7a68935fb0c27cea8109b4fed739243ec2b\GTP_LUT6
+Used module:     $paramod$0befe0e4adef1c9acbd37634ec98bd2eb57b4dbb\GTP_LUT6
+Used module:     $paramod$ad6b8728917f1e119836ae7b20127dc6d24516b8\GTP_LUT6
+Used module:     $paramod$309991c32eb1f8b8e0d4f490f8c9c224dd600612\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'10001010110110111110111111101111
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111101110111001101111111111
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111001100111101111100010011
+Used module:     $paramod\GTP_LUT5\INIT=32'11000000111101011100000011010101
+Used module:     $paramod$8444a219dde771365123fb5d07382f4e06b8f29f\GTP_LUT6
+Used module:     $paramod$989fbcf9d3fc84b4b68cd4c00120ad5397ecab1e\GTP_LUT6
+Used module:     $paramod$1e49d785005d54e8cc657855fefbaac5f2211b14\GTP_LUT6
+Used module:     $paramod$e69a9b267f0616575ed7bc16e6267928d5c77b14\GTP_LUT6
+Used module:     $paramod$ad7d904a2b4d070e9b7f9f02f6a8eb526397a38c\GTP_LUT6
+Used module:     $paramod$b5cfe2c18704430b3b95ce63612d3f70fe929edb\GTP_LUT6
+Used module:     $paramod$fa5f6645900a2ce626243d7c945b1a64bffdde6f\GTP_LUT6
+Used module:     $paramod$7f8716c9d15c5dbb86a756872cb5511d07309420\GTP_LUT6
+Used module:     $paramod$435d7a22e09340367a1e4724fb2e834216c88dac\GTP_LUT6
+Used module:     $paramod$1c59a15b83e2e317cda365d984e848a8ea5ff6d3\GTP_LUT6
+Used module:     $paramod$a2c1e11061410a2d87fa0c6a664a47534aaaf722\GTP_LUT6
+Used module:     $paramod$aab4d337b95ca70cdb9133a8d91d64744210dfb5\GTP_LUT6
+Used module:     $paramod$b06b596ce96ba6c1f0f4f6b66be82a9fb71dc76b\GTP_LUT6
+Used module:     $paramod$88fa6e7a755c6e98092c8f3afe5d35483a5a8851\GTP_LUT6
+Used module:     $paramod$7621e2ee885c62e5f041c4b42ecdc0a50de0493f\GTP_LUT6
+Used module:     $paramod$4e06ba89c28486c739dc5ce38bac0a6fc5dd7abf\GTP_LUT6
+Used module:     $paramod$4e07ad2c67932ca1420b785fde6d5a6c48ca3842\GTP_LUT6
+Used module:     $paramod$5ad723d187ad15dc26f3ae2656be20ef41dec880\GTP_LUT6
+Used module:     $paramod$5d868c4fc5beab741567845254b52431aad03116\GTP_LUT6
+Used module:     $paramod$35fc7f62298a3215639de86a2fd5dec8bd79a04a\GTP_LUT6
+Used module:     $paramod$2cbecf3a29bcdeaa5ca10271473ee0909e90297c\GTP_LUT6
+Used module:     $paramod$c1469613ecbb3e6311528b8a1bc2d0c0bc03c3ee\GTP_LUT6
+Used module:     $paramod$a8a1e06098e0bf397a91615c3f04416ca34e1c39\GTP_LUT6
+Used module:     $paramod$aba05e1238a5fdc9ef97c74372660e2a0c4d1275\GTP_LUT6
+Used module:     $paramod$f6dbff9a3594541b5f746d11566564347913d45f\GTP_LUT6
+Used module:     $paramod$5671d7dc81cb6ca746a1fad85f535565d5691c61\GTP_LUT6
+Used module:     $paramod$b3d54be374c9a3c67041a7bc3be72c5043de7cb2\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'00001111000011010000101000001000
+Used module:     $paramod\GTP_LUT5\INIT=32'00000000010101000000000000000000
+Used module:     $paramod\GTP_LUT5\INIT=32'00110011001000000011001100000000
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111000000010000000000000001
+Used module:     $paramod\GTP_LUT5\INIT=32'01111111111110110000000000000000
+Used module:     $paramod\GTP_LUT5\INIT=32'00000000000000000000000000000001
+Used module:     $paramod\GTP_LUT5\INIT=32'11111101000110111111110111111111
+Used module:     $paramod\GTP_LUT5\INIT=32'00000000000011000000110000000100
+Used module:     $paramod\GTP_LUT4\INIT=16'0000110000001000
+Used module:     $paramod\GTP_LUT4\INIT=16'0000000100000000
+Used module:     $paramod\GTP_LUT4\INIT=16'1111111000000000
+Used module:     $paramod$49293a3aef667995a2c3c6c6b56dc8a77c8530c8\GTP_LUT6
+Used module:     $paramod$6c089c60bb52d37c464e9a014e2eca2a656714e4\GTP_LUT6
+Used module:     $paramod$cce3bb293c6c6fbf56fd6cf4217944155b7626f3\GTP_LUT6
+Used module:     $paramod$d2dbb9108e7f5b5857387fb809c307b4d284103e\GTP_LUT6
+Used module:     $paramod$6cce0440d6e8cb8db42ef5c29b3549eb804f54d6\GTP_LUT6
+Used module:     $paramod$8be9e42a6dc3558b88c5dd00c53d3b26c0197121\GTP_LUT6
+Used module:     $paramod$e3fac8e3397f60033236070261231b5de5f40efc\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'01110000000000000111011100000000
+Used module:     $paramod$784efd17857e29b0cb94577cd206d0e512239b5b\GTP_LUT6
+Used module:     $paramod$5daebce6715754a5a3dac04dd27e8df9a09bd45d\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'11111111111111100101010101010100
+Used module:     $paramod$b0b37afa29fdbe640b002b78041873b231006b45\GTP_LUT6
+Used module:     $paramod$68e092ef1aef4c12a3f56552642dc2d1793855a0\GTP_LUT6
+Used module:     $paramod$45933e7d2f5a288be82b1062e2e45399018a4204\GTP_LUT6
+Used module:     $paramod$e9a1f9cc05b223201e117c6e9ca7405833555970\GTP_LUT6
+Used module:     $paramod$341f347a2ba9cc54ac961eeb62b0b7bebaa63353\GTP_LUT6
+Used module:     $paramod$08409ed8435449a44b6a94de4af83b8e994739de\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'00100011101011111010111110101111
+Used module:     $paramod\GTP_LUT5\INIT=32'11001101110011111100111111001111
+Used module:     $paramod\GTP_LUT3\INIT=8'00001000
+Used module:     $paramod\GTP_LUT3\INIT=8'01000000
+Used module:     $paramod$7adbd24b70053a7fcb9f40abd9fab557f3f5160e\GTP_LUT6
+Used module:     $paramod$06e9396e7a75db98978af6e6c0fcc2a62edbf7b2\GTP_LUT6
+Used module:     $paramod$081a0ce1ed7b7190532bd53d8a28e50b844fa072\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'01111111001111110000111100001111
+Used module:     $paramod\GTP_LUT5\INIT=32'00001000000010101000100010101010
+Used module:     $paramod\GTP_LUT5\INIT=32'11101111010111110000111100001111
+Used module:     $paramod\GTP_LUT5\INIT=32'00110000000000010011000100000001
+Used module:     $paramod$8950263da2595f45577ed28b680f399a8c34ef3c\GTP_LUT6
+Used module:     $paramod$7d523dbf684a6eb478f3e9c70a7a0645ba7c50ab\GTP_LUT6
+Used module:     $paramod$1195691caf5e15bb2cd07c06e61549151ff62318\GTP_LUT6
+Used module:     $paramod\GTP_LUT5\INIT=32'11100000000000000010000000000000
+Used module:     $paramod$da12b6242789738f0f58cbdd86be251ce0816178\GTP_LUT6D
+Used module:     $paramod\GTP_LUT5D\INIT=32'00000100000001000000000000001111
+Used module:     $paramod$c027fa64a29e71f88060ec15d054230cf6f7c34d\GTP_LUT6D
+Used module:     $paramod$777a80276501f95eeb3a05e4094eaede6475dbeb\GTP_LUT6D
+Used module:     $paramod$518294938c088411c4cb68b9b6803014cd150a78\GTP_LUT6D
+Used module:     $paramod\GTP_LUT5D\INIT=32'10001000110011000000111100000000
+Used module:     $paramod$2ddfdd844b097ed4080b4e60728a6d23eed8753c\GTP_LUT6D
+Used module:     $paramod$938194ea68ff53d0a40772b0d1e6f5c3374f734e\GTP_LUT6D
+Used module:     $paramod$379bbe786981c6c3b74a1700e5e8dd93e4806f0b\GTP_LUT6D
+Used module:     $paramod\GTP_LUT4D\INIT=16'0001000110001000
+Used module:     $paramod\GTP_LUT4D\INIT=16'1000100000010001
+Removing unused module `\GTP_LUT4D'.
+Removing unused module `\GTP_LUT5D'.
+Removing unused module `\GTP_LUT6D'.
+Removing unused module `\GTP_LUT6'.
+Removing unused module `\GTP_LUT5'.
+Removing unused module `\GTP_LUT4'.
+Removing unused module `\GTP_LUT3'.
+Removing unused module `\GTP_LUT2'.
+Removing unused module `\GTP_LUT1'.
+Removed 9 unused modules.
+
+4. Executing FLATTEN pass (flatten design).
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'00000100000001000000000000001111.
+Deleting now unused module $paramod$da12b6242789738f0f58cbdd86be251ce0816178\GTP_LUT6D.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11100000000000000010000000000000.
+Deleting now unused module $paramod$1195691caf5e15bb2cd07c06e61549151ff62318\GTP_LUT6.
+Deleting now unused module $paramod$7d523dbf684a6eb478f3e9c70a7a0645ba7c50ab\GTP_LUT6.
+Deleting now unused module $paramod$8950263da2595f45577ed28b680f399a8c34ef3c\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00110000000000010011000100000001.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11101111010111110000111100001111.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00001000000010101000100010101010.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'01111111001111110000111100001111.
+Deleting now unused module $paramod$081a0ce1ed7b7190532bd53d8a28e50b844fa072\GTP_LUT6.
+Deleting now unused module $paramod$06e9396e7a75db98978af6e6c0fcc2a62edbf7b2\GTP_LUT6.
+Deleting now unused module $paramod$7adbd24b70053a7fcb9f40abd9fab557f3f5160e\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT3\INIT=8'01000000.
+Deleting now unused module $paramod\GTP_LUT3\INIT=8'00001000.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11001101110011111100111111001111.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00100011101011111010111110101111.
+Deleting now unused module $paramod$08409ed8435449a44b6a94de4af83b8e994739de\GTP_LUT6.
+Deleting now unused module $paramod$341f347a2ba9cc54ac961eeb62b0b7bebaa63353\GTP_LUT6.
+Deleting now unused module $paramod$e9a1f9cc05b223201e117c6e9ca7405833555970\GTP_LUT6.
+Deleting now unused module $paramod$45933e7d2f5a288be82b1062e2e45399018a4204\GTP_LUT6.
+Deleting now unused module $paramod$68e092ef1aef4c12a3f56552642dc2d1793855a0\GTP_LUT6.
+Deleting now unused module $paramod$b0b37afa29fdbe640b002b78041873b231006b45\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11111111111111100101010101010100.
+Deleting now unused module $paramod$5daebce6715754a5a3dac04dd27e8df9a09bd45d\GTP_LUT6.
+Deleting now unused module $paramod$784efd17857e29b0cb94577cd206d0e512239b5b\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'01110000000000000111011100000000.
+Deleting now unused module $paramod$e3fac8e3397f60033236070261231b5de5f40efc\GTP_LUT6.
+Deleting now unused module $paramod$8be9e42a6dc3558b88c5dd00c53d3b26c0197121\GTP_LUT6.
+Deleting now unused module $paramod$6cce0440d6e8cb8db42ef5c29b3549eb804f54d6\GTP_LUT6.
+Deleting now unused module $paramod$d2dbb9108e7f5b5857387fb809c307b4d284103e\GTP_LUT6.
+Deleting now unused module $paramod$cce3bb293c6c6fbf56fd6cf4217944155b7626f3\GTP_LUT6.
+Deleting now unused module $paramod$6c089c60bb52d37c464e9a014e2eca2a656714e4\GTP_LUT6.
+Deleting now unused module $paramod$49293a3aef667995a2c3c6c6b56dc8a77c8530c8\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT4\INIT=16'1111111000000000.
+Deleting now unused module $paramod\GTP_LUT4\INIT=16'0000000100000000.
+Deleting now unused module $paramod\GTP_LUT4\INIT=16'0000110000001000.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00000000000011000000110000000100.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11111101000110111111110111111111.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00000000000000000000000000000001.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'01111111111110110000000000000000.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11111111000000010000000000000001.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00110011001000000011001100000000.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00000000010101000000000000000000.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'00001111000011010000101000001000.
+Deleting now unused module $paramod$b3d54be374c9a3c67041a7bc3be72c5043de7cb2\GTP_LUT6.
+Deleting now unused module $paramod$5671d7dc81cb6ca746a1fad85f535565d5691c61\GTP_LUT6.
+Deleting now unused module $paramod$f6dbff9a3594541b5f746d11566564347913d45f\GTP_LUT6.
+Deleting now unused module $paramod$aba05e1238a5fdc9ef97c74372660e2a0c4d1275\GTP_LUT6.
+Deleting now unused module $paramod$a8a1e06098e0bf397a91615c3f04416ca34e1c39\GTP_LUT6.
+Deleting now unused module $paramod$c1469613ecbb3e6311528b8a1bc2d0c0bc03c3ee\GTP_LUT6.
+Deleting now unused module $paramod$2cbecf3a29bcdeaa5ca10271473ee0909e90297c\GTP_LUT6.
+Deleting now unused module $paramod$35fc7f62298a3215639de86a2fd5dec8bd79a04a\GTP_LUT6.
+Deleting now unused module $paramod$5d868c4fc5beab741567845254b52431aad03116\GTP_LUT6.
+Deleting now unused module $paramod$5ad723d187ad15dc26f3ae2656be20ef41dec880\GTP_LUT6.
+Deleting now unused module $paramod$4e07ad2c67932ca1420b785fde6d5a6c48ca3842\GTP_LUT6.
+Deleting now unused module $paramod$4e06ba89c28486c739dc5ce38bac0a6fc5dd7abf\GTP_LUT6.
+Deleting now unused module $paramod$7621e2ee885c62e5f041c4b42ecdc0a50de0493f\GTP_LUT6.
+Deleting now unused module $paramod$88fa6e7a755c6e98092c8f3afe5d35483a5a8851\GTP_LUT6.
+Deleting now unused module $paramod$b06b596ce96ba6c1f0f4f6b66be82a9fb71dc76b\GTP_LUT6.
+Deleting now unused module $paramod$aab4d337b95ca70cdb9133a8d91d64744210dfb5\GTP_LUT6.
+Deleting now unused module $paramod$a2c1e11061410a2d87fa0c6a664a47534aaaf722\GTP_LUT6.
+Deleting now unused module $paramod$1c59a15b83e2e317cda365d984e848a8ea5ff6d3\GTP_LUT6.
+Deleting now unused module $paramod$435d7a22e09340367a1e4724fb2e834216c88dac\GTP_LUT6.
+Deleting now unused module $paramod$7f8716c9d15c5dbb86a756872cb5511d07309420\GTP_LUT6.
+Deleting now unused module $paramod$fa5f6645900a2ce626243d7c945b1a64bffdde6f\GTP_LUT6.
+Deleting now unused module $paramod$b5cfe2c18704430b3b95ce63612d3f70fe929edb\GTP_LUT6.
+Deleting now unused module $paramod$ad7d904a2b4d070e9b7f9f02f6a8eb526397a38c\GTP_LUT6.
+Deleting now unused module $paramod$e69a9b267f0616575ed7bc16e6267928d5c77b14\GTP_LUT6.
+Deleting now unused module $paramod$1e49d785005d54e8cc657855fefbaac5f2211b14\GTP_LUT6.
+Deleting now unused module $paramod$989fbcf9d3fc84b4b68cd4c00120ad5397ecab1e\GTP_LUT6.
+Deleting now unused module $paramod$8444a219dde771365123fb5d07382f4e06b8f29f\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11000000111101011100000011010101.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11111111001100111101111100010011.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'11111111101110111001101111111111.
+Deleting now unused module $paramod\GTP_LUT5\INIT=32'10001010110110111110111111101111.
+Deleting now unused module $paramod$309991c32eb1f8b8e0d4f490f8c9c224dd600612\GTP_LUT6.
+Deleting now unused module $paramod$ad6b8728917f1e119836ae7b20127dc6d24516b8\GTP_LUT6.
+Deleting now unused module $paramod$0befe0e4adef1c9acbd37634ec98bd2eb57b4dbb\GTP_LUT6.
+Deleting now unused module $paramod$fac1c7a68935fb0c27cea8109b4fed739243ec2b\GTP_LUT6.
+Deleting now unused module $paramod$7e622e7a9f1d0da957f4d8a42c55c5930dbf86e3\GTP_LUT6.
+Deleting now unused module $paramod$1c0f03f390fcb7d509cb4b0d8dbf43c45f84f8c3\GTP_LUT6.
+Deleting now unused module $paramod$a783f7658c0f066839e6913053f84e4b1d41c790\GTP_LUT6.
+Deleting now unused module $paramod$764c9f086cfaacc514d167d1ad29c1d5c4ee1b4a\GTP_LUT6.
+Deleting now unused module $paramod$66348c8deb265d226349e78490f73a1614883e1c\GTP_LUT6.
+Deleting now unused module $paramod$8b091bdfa70d3a26a91cd1753d26892af06918ce\GTP_LUT6.
+Deleting now unused module $paramod$7964b169f6b041aa9e6eb215aa29f269d7c11666\GTP_LUT6.
+Deleting now unused module $paramod$837b0d4d0ee8911a73b10258d55ed33ff65c5577\GTP_LUT6.
+Deleting now unused module $paramod$546ed2929d69abe482dba98b919c2444cc626c09\GTP_LUT6.
+Deleting now unused module $paramod$917c283221303c42cb8a746abe9639875d797906\GTP_LUT6.
+Deleting now unused module $paramod$7a4644c6c2d89c82f7a9a17ef43b321013b474b1\GTP_LUT6.
+Deleting now unused module $paramod$59da8001f10c611fe03edf7f86f2365e77a53be6\GTP_LUT6.
+Deleting now unused module $paramod$702b953395245086b47022a652694840b4253b0e\GTP_LUT6.
+Deleting now unused module $paramod$03cf0a3f04f31c0b6cd16c887bde3b6342d9f7ab\GTP_LUT6.
+Deleting now unused module $paramod$c06b00cea4d8a8a0b5e425a89d89a0672f7fb80b\GTP_LUT6.
+Deleting now unused module $paramod$b618f112ad39f5194af7e6b560686378d4584555\GTP_LUT6.
+Deleting now unused module $paramod$c17712a4539d6167acb75b36b4ca4f5fb54967ed\GTP_LUT6.
+Deleting now unused module $paramod$6dd3ef315177c83acd8b7c6cfc9f92eb92759b01\GTP_LUT6.
+Deleting now unused module $paramod$42ce0eaced44a560db6950b7adae408b6b96c6aa\GTP_LUT6.
+Deleting now unused module $paramod$f79e2320780da9747722ebfe5757971ceb26f16f\GTP_LUT6.
+Deleting now unused module $paramod\GTP_LUT4D\INIT=16'1000100000010001.
+Deleting now unused module $paramod\GTP_LUT4D\INIT=16'0001000110001000.
+Deleting now unused module $paramod$379bbe786981c6c3b74a1700e5e8dd93e4806f0b\GTP_LUT6D.
+Deleting now unused module $paramod$938194ea68ff53d0a40772b0d1e6f5c3374f734e\GTP_LUT6D.
+Deleting now unused module $paramod$2ddfdd844b097ed4080b4e60728a6d23eed8753c\GTP_LUT6D.
+Deleting now unused module $paramod\GTP_LUT5D\INIT=32'10001000110011000000111100000000.
+Deleting now unused module $paramod$518294938c088411c4cb68b9b6803014cd150a78\GTP_LUT6D.
+Deleting now unused module $paramod$777a80276501f95eeb3a05e4094eaede6475dbeb\GTP_LUT6D.
+Deleting now unused module $paramod$c027fa64a29e71f88060ec15d054230cf6f7c34d\GTP_LUT6D.
+<suppressed ~109 debug messages>
+
+5. Executing TECHMAP pass (map to technology primitives).
+
+5.1. Executing Verilog-2005 frontend: /Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v
+Parsing Verilog input from `/Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v' to AST representation.
+verilog frontend filename /Users/yoyowang/Desktop/yosysDualOutputLUT/share/techmap.v
+Generating RTLIL representation for module `\_90_simplemap_bool_ops'.
+Generating RTLIL representation for module `\_90_simplemap_reduce_ops'.
+Generating RTLIL representation for module `\_90_simplemap_logic_ops'.
+Generating RTLIL representation for module `\_90_simplemap_compare_ops'.
+Generating RTLIL representation for module `\_90_simplemap_various'.
+Generating RTLIL representation for module `\_90_simplemap_registers'.
+Generating RTLIL representation for module `\_90_shift_ops_shr_shl_sshl_sshr'.
+Generating RTLIL representation for module `\_90_shift_shiftx'.
+Generating RTLIL representation for module `\_90_fa'.
+Generating RTLIL representation for module `\_90_lcu_brent_kung'.
+Generating RTLIL representation for module `\_90_alu'.
+Generating RTLIL representation for module `\_90_macc'.
+Generating RTLIL representation for module `\_90_alumacc'.
+Generating RTLIL representation for module `\$__div_mod_u'.
+Generating RTLIL representation for module `\$__div_mod_trunc'.
+Generating RTLIL representation for module `\_90_div'.
+Generating RTLIL representation for module `\_90_mod'.
+Generating RTLIL representation for module `\$__div_mod_floor'.
+Generating RTLIL representation for module `\_90_divfloor'.
+Generating RTLIL representation for module `\_90_modfloor'.
+Generating RTLIL representation for module `\_90_pow'.
+Generating RTLIL representation for module `\_90_pmux'.
+Generating RTLIL representation for module `\_90_demux'.
+Generating RTLIL representation for module `\_90_lut'.
+Generating RTLIL representation for module `\$connect'.
+Generating RTLIL representation for module `\$input_port'.
+Successfully finished Verilog frontend.
+
+5.2. Continuing TECHMAP pass.
+Using extmapper simplemap for cells of type $mux.
+Using extmapper simplemap for cells of type $lut.
+No more expansions possible.
+<suppressed ~284 debug messages>
+
+6. Executing OPT pass (performing simple optimizations).
+
+6.1. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/cavlc.aig.
+<suppressed ~4178 debug messages>
+
+6.2. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/cavlc.aig'.
+<suppressed ~2787 debug messages>
+Removed a total of 929 cells.
+
+6.3. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/cavlc.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+6.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/cavlc.aig.
+Performed a total of 0 changes.
+
+6.5. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/cavlc.aig'.
+Removed a total of 0 cells.
+
+6.6. Executing OPT_DFF pass (perform DFF optimizations).
+
+6.7. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/cavlc.aig..
+Removed 0 unused cells and 414 unused wires.
+<suppressed ~1 debug messages>
+
+6.8. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/cavlc.aig.
+<suppressed ~115 debug messages>
+
+6.9. Rerunning OPT passes. (Maybe there is more to do..)
+
+6.10. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/cavlc.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+6.11. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/cavlc.aig.
+Performed a total of 0 changes.
+
+6.12. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/cavlc.aig'.
+<suppressed ~18 debug messages>
+Removed a total of 6 cells.
+
+6.13. Executing OPT_DFF pass (perform DFF optimizations).
+
+6.14. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/cavlc.aig..
+Removed 0 unused cells and 5 unused wires.
+<suppressed ~1 debug messages>
+
+6.15. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/cavlc.aig.
+
+6.16. Rerunning OPT passes. (Maybe there is more to do..)
+
+6.17. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
+Running muxtree optimizer on module \/Users/yoyowang/Desktop/benchmark/cavlc.aig..
+  Creating internal representation of mux trees.
+  No muxes found in this module.
+Removed 0 multiplexer ports.
+
+6.18. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
+  Optimizing cells in module \/Users/yoyowang/Desktop/benchmark/cavlc.aig.
+Performed a total of 0 changes.
+
+6.19. Executing OPT_MERGE pass (detect identical cells).
+Finding identical cells in module `\/Users/yoyowang/Desktop/benchmark/cavlc.aig'.
+Removed a total of 0 cells.
+
+6.20. Executing OPT_DFF pass (perform DFF optimizations).
+
+6.21. Executing OPT_CLEAN pass (remove unused cells and wires).
+Finding unused cells or wires in module \/Users/yoyowang/Desktop/benchmark/cavlc.aig..
+
+6.22. Executing OPT_EXPR pass (perform const folding).
+Optimizing module /Users/yoyowang/Desktop/benchmark/cavlc.aig.
+
+6.23. Finished fast OPT passes. (There is nothing left to do.)
+
+7. Executing AIGMAP pass (map logic to AIG).
+Module /Users/yoyowang/Desktop/benchmark/cavlc.aig: replaced 773 cells with 5411 new cells, skipped 148 cells.
+  replaced 1 cell types:
+     773 $_MUX_
+  not replaced 2 cell types:
+      39 $_NOT_
+     109 $scopeinfo
+
+8. Executing AIGER backend.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\totalcoeffs[0] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\totalcoeffs[1] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\totalcoeffs[2] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\totalcoeffs[3] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\totalcoeffs[4] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\ctable[0] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\ctable[1] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\ctable[2] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\trailingones[0] like $anyseq.
+Warning: Treating undriven bit /Users/yoyowang/Desktop/benchmark/cavlc.aig.\trailingones[1] like $anyseq.
+Warning: Treating a total of 10 undriven bits in /Users/yoyowang/Desktop/benchmark/cavlc.aig like $anyseq.
+
+Warnings: 11 unique messages, 11 total
+End of script. Logfile hash: 4718e5f8cc, CPU: user 0.06s system 0.00s, MEM: 25.50 MB peak
+Yosys 0.60+64 (git sha1 e3af261e1-dirty, clang++ 17.0.0 -fPIC -O3)
+Time spent: 27% 4x opt_expr (0 sec), 17% 5x read_verilog (0 sec), ...

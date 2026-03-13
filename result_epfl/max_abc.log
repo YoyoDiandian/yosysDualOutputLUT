@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/max.aig; ps; if -K 6; ps; write_verilog test_output_epfl/max_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/max:[0m i/o =  512/  130  lat =    0  and =   2865  lev =287
+[1;37m/Users/yoyowang/Desktop/benchmark/max:[0m i/o =  512/  130  lat =    0  nd =   842  edge =   3350  aig  =  3365  lev = 56

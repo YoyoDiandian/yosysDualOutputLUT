@@ -4,6 +4,7 @@
 #include "kernel/sigtools.h"
 #include "kernel/yosys.h"
 #include <algorithm>
+#include <limits>
 #include <numeric>
 #include <queue>
 #include <ranges>
@@ -22,10 +23,19 @@ static int MAX_PAIRS_PER_NODE = 32;   // 每个节点最多评估的双输出配
 static int MAX_DISJOINT_PAIRS_PER_NODE = 24; // 每节点保留的”无共享输入”配对上限
 static int LAYER_CUTS_PER_NODE = 4;   // 层覆盖阶段每节点参与配对的cut数量
 static int MAX_I5_CANDIDATES = 6;     // 每个候选最多尝试的I5数量
+static int PAIR_SEED_MULTIPLIER = 10; // 每节点候选配对预筛上限倍数（相对MAX_PAIRS_PER_NODE）
 static int MIN_SHARED_INPUTS_FOR_DUAL = 0; // 双输出候选的最小共享输入数
 static double MIN_AREA_GAIN_FOR_DUAL = -0.15;      // 双输出最小面积收益
 static double MIN_AREA_GAIN_FOR_WEAK_SHARE = -0.25; // 共享输入较少时阈值
 static double MIN_AREA_GAIN_FOR_NO_SHARE = -0.80;   // 无共享输入时阈值（面积估计不稳，大幅放宽）
+static int EXTRA_MODE_GATE_LIMIT = 1500; // 仅中小规模网络运行最贵的附加覆盖模式
+static float AREA_ROUND_REQUIRED_SLACK = 1.0f; // area轮允许的绝对时序松弛（层级）
+static float AREA_ROUND_REQUIRED_RELAX = 0.05f; // area轮允许的相对时序松弛
+static int FINAL_AREA_RECOVERY_ROUNDS = 2; // 末尾额外面积恢复轮次（不再强约束timing）
+static int POSTPACK_PASS1_SCAN_WINDOW = 0; // 第一轮后处理配对扫描窗口，0表示全量扫描
+static int POSTPACK_PASS2_MAX_SINGLE = 512; // 二次后处理候选上限（按输入数排序截断），0表示不截断
+static int POSTPACK_PASS2_SCAN_WINDOW = 0; // 第二轮后处理配对扫描窗口，0表示全量扫描
+static int POSTPACK_PASS2_MAX_CHUNKS = 1; // 第二轮后处理最多处理的候选分块数
 static float EPSILON = 0.005f;        // 浮点比较精度
 static int layer_invalid_log_count = 0;
 static bool ENABLE_DEPENDENCY_CHECK = false; // 依赖检查较贵，默认关闭
@@ -54,6 +64,7 @@ dict<Cell*, size_t> cell2level;  // 节点在拓扑排序中的层级
 dict<Cell*, float> cell2arrival;  // 节点的arrival time
 dict<Cell*, float> cell2required;  // 节点的required time
 dict<Cell*, Cut> cell2bestcut;
+dict<Cell*, vector<const Cut*>> layer_candidate_cut_cache; // 缓存层覆盖阶段候选cut
 dict<Cell*, int> cell2index;
 static dict<Cell*, int> orig_fanout;
 static bool fanout_ready = false;
@@ -186,18 +197,24 @@ struct Cut {
     
     // 面积优先的比较（用于Round 2+）
     bool betterAreaThan(const Cut &other, float required_time) const {
+        float relaxed_required = required_time;
+        if (required_time < 1e8f) {
+            relaxed_required += AREA_ROUND_REQUIRED_SLACK;
+            relaxed_required += required_time * AREA_ROUND_REQUIRED_RELAX;
+        }
         // 必须满足timing约束
-        if (arrival_time > required_time + EPSILON) return false;
-        if (other.arrival_time > required_time + EPSILON) return true;
+        if (arrival_time > relaxed_required + EPSILON) return false;
+        if (other.arrival_time > relaxed_required + EPSILON) return true;
         // 在timing约束内，选择area更小的
         if (fabs(area_flow - other.area_flow) > EPSILON)
             return area_flow < other.area_flow;
         if (fabs(arrival_time - other.arrival_time) > EPSILON)
             return arrival_time < other.arrival_time;
+        // 面积轮次下，优先更“深/大”的cut，通常可减少总覆盖节点数
         if (leaves.size() != other.leaves.size())
-            return leaves.size() < other.leaves.size();
+            return leaves.size() > other.leaves.size();
         if (depth != other.depth)
-            return depth < other.depth;
+            return depth > other.depth;
         return signature < other.signature;
     }
     
@@ -429,7 +446,7 @@ bool IsAND(Cell *cell) {
     return cell->type.in(ID($_AND_), ID($and));
 }
 bool IsCombinationalGate(Cell *cell) {
-    return cell->type.in(ID($_AND_), ID($_NOT_), ID($and), ID($not));
+    return cell->type.in(ID($_AND_), ID($_NOT_), ID($and), ID($not), ID($lut));
 }
 
 void GetCellInputsSet(Cell *cell, pool<SigBit> &inputs)
@@ -822,6 +839,38 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
 		} else {
 			log_error("Cannot evaluate %s \n", log_signal(tout));
 		}
+	} else if (cell->type == ID($lut)) {
+        int width = 0;
+        if (cell->parameters.count(ID::WIDTH))
+            width = cell->getParam(ID::WIDTH).as_int();
+        if (width < 0)
+            width = 0;
+        if (width > 30)
+            width = 30;
+
+        Const lut_mask;
+        if (cell->parameters.count(ID::LUT))
+            lut_mask = cell->getParam(ID::LUT);
+
+        int idx = 0;
+        int max_input = std::min<int>(width, int(bits.size()) - 1);
+        for (int i = 0; i < max_input; i++) {
+            State tmp = StateEval(bit_map, bits[i + 1]);
+            if (tmp != State::S0 && tmp != State::S1) {
+                bit_map[bits[0]] = State::Sx;
+                return State::Sx;
+            }
+            if (tmp == State::S1)
+                idx |= (1 << i);
+        }
+
+        State y_val = State::S0;
+        if (idx < lut_mask.size())
+            y_val = lut_mask[idx];
+        if (y_val != State::S0 && y_val != State::S1)
+            y_val = State::S0;
+        bit_map[bits[0]] = y_val;
+        return y_val;
 	} else {
 		log_error("unhandled cell %s \n", cell->type.c_str());
 	}
@@ -1038,6 +1087,66 @@ static void RecomputeRefsFromPOs(Module *module, const vector<Cell *> &gates)
     }
 }
 
+// 仅对cut叶子依赖做ref/deref（不改变root本身），用于精确面积恢复评估
+static int RefSupportFromCut(const Cut *cut)
+{
+    if (!cut)
+        return 0;
+
+    int area = 0;
+    for (auto leaf : cut->leaves) {
+        Cell *driver = bit2driver.count(leaf) ? bit2driver[leaf] : nullptr;
+        if (!driver || !IsCombinationalGate(driver))
+            continue;
+
+        int prev = cell2refs.count(driver) ? cell2refs[driver] : 0;
+        cell2refs[driver] = prev + 1;
+        if (prev > 0)
+            continue;
+
+        area += 1;
+        const Cut *driver_cut = nullptr;
+        if (cell2bestcut.count(driver))
+            driver_cut = &cell2bestcut[driver];
+        else if (cell2cuts.count(driver) && !cell2cuts[driver].empty())
+            driver_cut = &cell2cuts[driver][0];
+        area += RefSupportFromCut(driver_cut);
+    }
+    return area;
+}
+
+static int DerefSupportFromCut(const Cut *cut)
+{
+    if (!cut)
+        return 0;
+
+    int area = 0;
+    for (auto leaf : cut->leaves) {
+        Cell *driver = bit2driver.count(leaf) ? bit2driver[leaf] : nullptr;
+        if (!driver || !IsCombinationalGate(driver))
+            continue;
+        if (!cell2refs.count(driver))
+            continue;
+
+        int prev = cell2refs[driver];
+        if (prev <= 0)
+            continue;
+
+        cell2refs[driver] = prev - 1;
+        if (prev > 1)
+            continue;
+
+        area += 1;
+        const Cut *driver_cut = nullptr;
+        if (cell2bestcut.count(driver))
+            driver_cut = &cell2bestcut[driver];
+        else if (cell2cuts.count(driver) && !cell2cuts[driver].empty())
+            driver_cut = &cell2cuts[driver][0];
+        area += DerefSupportFromCut(driver_cut);
+    }
+    return area;
+}
+
 // 合并两个割集（用于AND门的两个输入）
 Cut MergeCuts(const Cut &cut1, const Cut &cut2) {
     Cut result;
@@ -1124,6 +1233,96 @@ vector<Cut> RemoveDominatedCuts(vector<Cut> &cuts) {
         if (!dominated[i])
             result.push_back(cuts[i]);
     }
+    return result;
+}
+
+static bool AreaRankBetter(const Cut &a, const Cut &b)
+{
+    if (fabs(a.area_flow - b.area_flow) > EPSILON)
+        return a.area_flow < b.area_flow;
+    if (fabs(a.arrival_time - b.arrival_time) > EPSILON)
+        return a.arrival_time < b.arrival_time;
+    if (a.leaves.size() != b.leaves.size())
+        return a.leaves.size() > b.leaves.size();
+    if (a.depth != b.depth)
+        return a.depth > b.depth;
+    return a.signature < b.signature;
+}
+
+static vector<Cut> PruneCutsDiverse(const vector<Cut> &sorted_cuts, size_t limit)
+{
+    if (sorted_cuts.size() <= limit)
+        return sorted_cuts;
+
+    vector<char> picked(sorted_cuts.size(), 0);
+    vector<size_t> keep;
+    keep.reserve(limit);
+
+    auto pick_index = [&](size_t idx) {
+        if (idx >= sorted_cuts.size() || picked[idx] || keep.size() >= limit)
+            return false;
+        picked[idx] = 1;
+        keep.push_back(idx);
+        return true;
+    };
+
+    // 1) 保留一半的“延迟优先”cut，维持时序质量。
+    size_t delay_quota = std::max<size_t>(1, limit / 2);
+    for (size_t i = 0; i < sorted_cuts.size() && keep.size() < delay_quota; i++)
+        pick_index(i);
+
+    // 2) 每个leaf-size至少保留一个area更优cut，避免大cut被完全挤掉。
+    for (int leaf_sz = LUT_SIZE; leaf_sz >= 1 && keep.size() < limit; leaf_sz--) {
+        size_t best_idx = SIZE_MAX;
+        for (size_t i = 0; i < sorted_cuts.size(); i++) {
+            if (picked[i]) continue;
+            if ((int)sorted_cuts[i].leaves.size() != leaf_sz) continue;
+            if (best_idx == SIZE_MAX || AreaRankBetter(sorted_cuts[i], sorted_cuts[best_idx]))
+                best_idx = i;
+        }
+        if (best_idx != SIZE_MAX)
+            pick_index(best_idx);
+    }
+
+    // 3) 补充少量深cut，增加跨层覆盖机会。
+    size_t depth_quota = std::max<size_t>(1, limit / 6);
+    vector<size_t> depth_order(sorted_cuts.size());
+    iota(depth_order.begin(), depth_order.end(), 0);
+    sort(depth_order.begin(), depth_order.end(),
+         [&](size_t a, size_t b) {
+             if (sorted_cuts[a].depth != sorted_cuts[b].depth)
+                 return sorted_cuts[a].depth > sorted_cuts[b].depth;
+             return AreaRankBetter(sorted_cuts[a], sorted_cuts[b]);
+         });
+    size_t picked_depth = 0;
+    for (size_t idx : depth_order) {
+        if (keep.size() >= limit || picked_depth >= depth_quota)
+            break;
+        if (pick_index(idx))
+            picked_depth++;
+    }
+
+    // 4) 剩余名额按area排序补齐。
+    vector<size_t> area_order(sorted_cuts.size());
+    iota(area_order.begin(), area_order.end(), 0);
+    sort(area_order.begin(), area_order.end(),
+         [&](size_t a, size_t b) {
+             return AreaRankBetter(sorted_cuts[a], sorted_cuts[b]);
+         });
+    for (size_t idx : area_order) {
+        if (keep.size() >= limit)
+            break;
+        pick_index(idx);
+    }
+
+    // 5) 最后兜底，保证数量达到limit。
+    for (size_t i = 0; i < sorted_cuts.size() && keep.size() < limit; i++)
+        pick_index(i);
+
+    vector<Cut> result;
+    result.reserve(keep.size());
+    for (size_t idx : keep)
+        result.push_back(sorted_cuts[idx]);
     return result;
 }
 
@@ -1275,10 +1474,9 @@ void GenerateCutsForNode(Cell *node, vector<Cut> &cuts) {
     // 5. 按优先级排序
     sort(cuts.begin(), cuts.end());
     
-    // 6. N-Cut剪枝
-    if (cuts.size() > size_t(MAX_CUTS_PER_NODE)) {
-        cuts.resize(size_t(MAX_CUTS_PER_NODE));
-    }
+    // 6. N-Cut剪枝（保留一定的cut多样性，避免仅保留延迟最优cut）
+    if (cuts.size() > size_t(MAX_CUTS_PER_NODE))
+        cuts = PruneCutsDiverse(cuts, size_t(MAX_CUTS_PER_NODE));
     
     log_debug("Node %s generated %zu cuts\n", node->name.c_str(), cuts.size());
     for (size_t i = 0; i < cuts.size(); i++) {
@@ -1811,6 +2009,10 @@ static void CollectLayerCandidateCuts(Cell* node, vector<const Cut*>& cuts)
     cuts.clear();
     if (!node) return;
     if (!cell2cuts.count(node) || cell2cuts[node].empty()) return;
+    if (layer_candidate_cut_cache.count(node)) {
+        cuts = layer_candidate_cut_cache[node];
+        return;
+    }
 
     const vector<Cut>& all = cell2cuts[node];
     const Cut* best = nullptr;
@@ -1865,6 +2067,7 @@ static void CollectLayerCandidateCuts(Cell* node, vector<const Cut*>& cuts)
     if (cuts.empty()) {
         cuts.push_back(best);
     }
+    layer_candidate_cut_cache[node] = cuts;
 }
 
 // 为单个节点生成所有可能的多输出配对候选
@@ -1901,25 +2104,39 @@ static void GenerateDualCandidatesForNode(Cell* node, const pool<SigBit>& curren
     
     // 搜索可配对的候选节点：优先搜索共享输入的节点
     pool<Cell*> potential_pairs;
+    size_t pair_seed_limit = size_t(std::max(4, MAX_PAIRS_PER_NODE * PAIR_SEED_MULTIPLIER));
+    auto try_insert_pair = [&](Cell* cand) {
+        if (!cand || cand == node) return false;
+        if (!IsCombinationalGate(cand)) return false;
+        if (processed_nodes.count(cand)) return false;
+        potential_pairs.insert(cand);
+        return potential_pairs.size() >= pair_seed_limit;
+    };
+    bool seed_limit_hit = false;
     for (const Cut* node_cut : node_cuts) {
         for (SigBit leaf : node_cut->leaves) {
             if (bit2reader.count(leaf)) {
                 for (Cell* reader : bit2reader[leaf]) {
-                    if (reader != node && IsCombinationalGate(reader) && 
-                        !processed_nodes.count(reader)) {
-                        potential_pairs.insert(reader);
+                    if (try_insert_pair(reader)) {
+                        seed_limit_hit = true;
+                        break;
                     }
                 }
             }
+            if (seed_limit_hit) break;
         }
+        if (seed_limit_hit) break;
     }
-    
-    // 也考虑输出在当前层的其他节点
-    for (SigBit sig : current_layer) {
-        if (sig == node_output) continue;
-        Cell* driver = bit2driver.count(sig) ? bit2driver[sig] : nullptr;
-        if (driver && IsCombinationalGate(driver) && !processed_nodes.count(driver)) {
-            potential_pairs.insert(driver);
+
+    // 也考虑输出在当前层的其他节点（已达到预筛上限时跳过）
+    if (!seed_limit_hit) {
+        for (SigBit sig : current_layer) {
+            if (sig == node_output) continue;
+            Cell* driver = bit2driver.count(sig) ? bit2driver[sig] : nullptr;
+            if (try_insert_pair(driver)) {
+                seed_limit_hit = true;
+                break;
+            }
         }
     }
     
@@ -2379,6 +2596,7 @@ void LayerBasedCoveringMain(Module* module, vector<Cell*>& gates,
                             bool allow_dual) {
     log("\n=== Layer-Based Covering Algorithm ===\n");
     log("  Dual-output pairing: %s\n", allow_dual ? "enabled" : "disabled");
+    layer_candidate_cut_cache.clear();
     
     // 初始化：从PO开始
     pool<SigBit> current_layer = prime_outputs;
@@ -2567,9 +2785,8 @@ void LayerBasedCoveringMain(Module* module, vector<Cell*>& gates,
 static void BuildBestCutSingleCover(Module *module, const vector<Cell *> &gates,
                                     vector<SingleLUTInfo> &single_luts)
 {
+    (void)module;
     single_luts.clear();
-    RecomputeRefsFromPOs(module, gates);
-
     for (Cell *node : gates) {
         if (!node || !IsCombinationalGate(node))
             continue;
@@ -2584,6 +2801,50 @@ static void BuildBestCutSingleCover(Module *module, const vector<Cell *> &gates,
         if (BuildSingleLUTFromCut(node, *best_cut, single_lut))
             single_luts.push_back(single_lut);
     }
+}
+
+static void CountModuleMappingCells(Module *module, size_t &aig_cells,
+                                    size_t &lut_cells, size_t &gtp_lut_cells)
+{
+    aig_cells = 0;
+    lut_cells = 0;
+    gtp_lut_cells = 0;
+    for (Cell *cell : module->cells()) {
+        if (!cell)
+            continue;
+        if (cell->type.in(ID($_AND_), ID($_NOT_), ID($and), ID($not))) {
+            aig_cells++;
+            continue;
+        }
+        if (cell->type == ID($lut)) {
+            lut_cells++;
+            continue;
+        }
+        if (cell->type.in(ID(GTP_LUT2), ID(GTP_LUT3), ID(GTP_LUT4), ID(GTP_LUT5), ID(GTP_LUT6),
+                          ID(GTP_LUT4D), ID(GTP_LUT5D), ID(GTP_LUT6D))) {
+            gtp_lut_cells++;
+            continue;
+        }
+    }
+}
+
+static void MaybePreMapAigWithAbc(Design *design, Module *module)
+{
+    if (!design || !module)
+        return;
+
+    size_t aig_cells = 0, lut_cells = 0, gtp_lut_cells = 0;
+    CountModuleMappingCells(module, aig_cells, lut_cells, gtp_lut_cells);
+
+    if (aig_cells == 0)
+        return;
+    if (lut_cells > 0 || gtp_lut_cells > 0)
+        return;
+
+    log("AIG-dominant network detected (%zu AND/NOT cells). Running `abc -lut 6` baseline before LUT6D packing.\n",
+        aig_cells);
+    Pass::call(design, "abc -lut 6");
+    Pass::call(design, "clean");
 }
 
 // 后处理：将剩余的单输出LUT配对打包为双输出LUT6D
@@ -2641,8 +2902,11 @@ static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
         int best_j = -1;
         LUT6DInfo best_lut_info;
         size_t best_merged_size = 999;
+        size_t j_end = entries.size();
+        if (POSTPACK_PASS1_SCAN_WINDOW > 0)
+            j_end = std::min(entries.size(), i + 1 + size_t(POSTPACK_PASS1_SCAN_WINDOW));
 
-        for (size_t j = i + 1; j < entries.size(); j++) {
+        for (size_t j = i + 1; j < j_end; j++) {
             if (consumed.count(entries[j].idx)) continue;
             // 快速过滤：signature合并后popcount检查
             uint64_t combined_sig = entries[i].signature | entries[j].signature;
@@ -2772,8 +3036,61 @@ static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
              return a.idx < b.idx;
          });
 
+    // 对超大集合做分块：每块限制规模，避免一次性O(N^2)爆炸；
+    // 通过多块覆盖提升大型网络（如hyp）的剩余可配对机会。
+    size_t pass2_entry_cap = 0;
+    if (POSTPACK_PASS2_MAX_SINGLE > 0)
+        pass2_entry_cap = size_t(POSTPACK_PASS2_MAX_SINGLE);
+    size_t pass2_chunk_size = entries.size();
+    if (pass2_entry_cap > 0)
+        pass2_chunk_size = pass2_entry_cap;
+    if (pass2_chunk_size == 0)
+        pass2_chunk_size = entries.size();
+
+    vector<pair<size_t, size_t>> pass2_chunks;
+    size_t full_chunk_count = (entries.size() + pass2_chunk_size - 1) / pass2_chunk_size;
+    size_t max_chunk_count = full_chunk_count;
+    if (POSTPACK_PASS2_MAX_CHUNKS > 0)
+        max_chunk_count = std::min(max_chunk_count, size_t(POSTPACK_PASS2_MAX_CHUNKS));
+    if (max_chunk_count == 0)
+        max_chunk_count = 1;
+
+    if (full_chunk_count <= max_chunk_count) {
+        for (size_t start = 0; start < entries.size(); start += pass2_chunk_size) {
+            size_t end = std::min(entries.size(), start + pass2_chunk_size);
+            if (end > start)
+                pass2_chunks.emplace_back(start, end);
+        }
+    } else {
+        if (max_chunk_count == 1) {
+            size_t end = std::min(entries.size(), pass2_chunk_size);
+            pass2_chunks.emplace_back(0, end);
+        } else {
+            size_t prefix_count = max_chunk_count - 1;
+            for (size_t c = 0; c < prefix_count; c++) {
+                size_t start = c * pass2_chunk_size;
+                size_t end = std::min(entries.size(), start + pass2_chunk_size);
+                if (end > start)
+                    pass2_chunks.emplace_back(start, end);
+            }
+            size_t tail_start = (full_chunk_count - 1) * pass2_chunk_size;
+            if (tail_start < entries.size())
+                pass2_chunks.emplace_back(tail_start, entries.size());
+        }
+        log("  Post-packing pass 2: chunking candidates total=%zu chunk=%zu full_chunks=%zu run_chunks=%zu\n",
+            entries.size(), pass2_chunk_size, full_chunk_count, pass2_chunks.size());
+    }
+    if (entries.size() < 2) return;
+
     size_t packed2 = 0;
-	    for (size_t i = 0; i < entries.size(); i++) {
+    size_t pass2_cut_limit = size_t(std::max(4, MAX_I5_CANDIDATES + 2));
+    for (size_t chunk_idx = 0; chunk_idx < pass2_chunks.size(); chunk_idx++) {
+        size_t chunk_begin = pass2_chunks[chunk_idx].first;
+        size_t chunk_end = pass2_chunks[chunk_idx].second;
+        if (chunk_end <= chunk_begin + 1)
+            continue;
+        size_t packed_before_chunk = packed2;
+	    for (size_t i = chunk_begin; i < chunk_end; i++) {
 	        if (consumed.count(entries[i].idx)) continue;
 	        size_t a_idx = entries[i].idx;
             SigBit outA = single_luts[a_idx].output;
@@ -2783,19 +3100,24 @@ static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
 	        if (!cellA) continue;
 
         // 收集A的备选cuts（包括best cut和更小的cuts）
-        vector<const Cut*> cuts_a;
-        if (cell2cuts.count(cellA)) {
-            for (auto &c : cell2cuts[cellA]) {
-                if (c.leaves.size() <= 5) cuts_a.push_back(&c);
-            }
-        }
-        if (cuts_a.empty()) continue;
+	        vector<const Cut*> cuts_a;
+	        if (cell2cuts.count(cellA)) {
+	            for (auto &c : cell2cuts[cellA]) {
+	                if (c.leaves.size() <= 5) cuts_a.push_back(&c);
+	            }
+	        }
+            if (cuts_a.size() > pass2_cut_limit)
+                cuts_a.resize(pass2_cut_limit);
+	        if (cuts_a.empty()) continue;
 
         int best_j = -1;
         LUT6DInfo best_lut_info;
         size_t best_merged_size = 999;
+        size_t j_end_pass2 = chunk_end;
+        if (POSTPACK_PASS2_SCAN_WINDOW > 0)
+            j_end_pass2 = std::min(chunk_end, i + 1 + size_t(POSTPACK_PASS2_SCAN_WINDOW));
 
-	        for (size_t j = i + 1; j < entries.size(); j++) {
+	        for (size_t j = i + 1; j < j_end_pass2; j++) {
 	            if (consumed.count(entries[j].idx)) continue;
 	            size_t b_idx_inner = entries[j].idx;
                 SigBit outB = single_luts[b_idx_inner].output;
@@ -2807,13 +3129,15 @@ static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
 	                              ? bit2driver[single_luts[b_idx_inner].output] : nullptr;
 	            if (!cellB) continue;
 
-            vector<const Cut*> cuts_b;
-            if (cell2cuts.count(cellB)) {
-                for (auto &c : cell2cuts[cellB]) {
-                    if (c.leaves.size() <= 5) cuts_b.push_back(&c);
-                }
-            }
-            if (cuts_b.empty()) continue;
+	            vector<const Cut*> cuts_b;
+	            if (cell2cuts.count(cellB)) {
+	                for (auto &c : cell2cuts[cellB]) {
+	                    if (c.leaves.size() <= 5) cuts_b.push_back(&c);
+	                }
+	            }
+                if (cuts_b.size() > pass2_cut_limit)
+                    cuts_b.resize(pass2_cut_limit);
+	            if (cuts_b.empty()) continue;
 
             // 尝试所有cut组合
             bool found_pair = false;
@@ -2882,6 +3206,12 @@ static void PostPackSingleLUTs(Module *module, const vector<Cell *> &gates,
             packed2++;
         }
     }
+        size_t merged_in_chunk = packed2 - packed_before_chunk;
+        if (merged_in_chunk > 0) {
+            log("  Post-packing pass 2 chunk %zu/%zu: merged %zu pairs\n",
+                chunk_idx + 1, pass2_chunks.size(), merged_in_chunk);
+        }
+    }
 
     if (packed2 > 0) {
         vector<SingleLUTInfo> remaining;
@@ -2901,6 +3231,90 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     prime_inputs.clear();
     prime_outputs.clear();
     GetPrimeInputOutput(module, prime_inputs, prime_outputs);
+
+    // 基于网络规模做自适应预算，优先控制复杂度的增长速度。
+    int saved_max_cuts_per_node = MAX_CUTS_PER_NODE;
+    int saved_mapping_rounds = MAPPING_ROUNDS;
+    int saved_max_pairs_per_node = MAX_PAIRS_PER_NODE;
+    int saved_max_disjoint_pairs_per_node = MAX_DISJOINT_PAIRS_PER_NODE;
+    int saved_layer_cuts_per_node = LAYER_CUTS_PER_NODE;
+    int saved_max_i5_candidates = MAX_I5_CANDIDATES;
+    int saved_postpack_pass1_scan_window = POSTPACK_PASS1_SCAN_WINDOW;
+    int saved_postpack_pass2_max_single = POSTPACK_PASS2_MAX_SINGLE;
+    int saved_postpack_pass2_scan_window = POSTPACK_PASS2_SCAN_WINDOW;
+    int saved_postpack_pass2_max_chunks = POSTPACK_PASS2_MAX_CHUNKS;
+    int saved_pair_seed_multiplier = PAIR_SEED_MULTIPLIER;
+
+    size_t gate_count = gates.size();
+    if (gate_count >= 200000) {
+        // 超大网络：提升post-pack覆盖，重点改善hyp类算例。
+        MAX_CUTS_PER_NODE = 40;
+        MAX_PAIRS_PER_NODE = 14;
+        MAX_DISJOINT_PAIRS_PER_NODE = 10;
+        LAYER_CUTS_PER_NODE = 2;
+        MAX_I5_CANDIDATES = 6;
+        MAPPING_ROUNDS = 4;
+        POSTPACK_PASS1_SCAN_WINDOW = 320;
+        POSTPACK_PASS2_MAX_SINGLE = 24000;
+        POSTPACK_PASS2_SCAN_WINDOW = 80;
+        POSTPACK_PASS2_MAX_CHUNKS = 2;
+        PAIR_SEED_MULTIPLIER = 8;
+    } else if (gate_count >= 50000) {
+        // 很大网络：重点给mode3/post-pack更多空间，覆盖multiplier一类。
+        MAX_CUTS_PER_NODE = 56;
+        MAX_PAIRS_PER_NODE = 20;
+        MAX_DISJOINT_PAIRS_PER_NODE = 14;
+        LAYER_CUTS_PER_NODE = 3;
+        MAX_I5_CANDIDATES = 6;
+        MAPPING_ROUNDS = 6;
+        POSTPACK_PASS1_SCAN_WINDOW = 512;
+        POSTPACK_PASS2_MAX_SINGLE = 12000;
+        POSTPACK_PASS2_SCAN_WINDOW = 128;
+        POSTPACK_PASS2_MAX_CHUNKS = 1;
+        PAIR_SEED_MULTIPLIER = 10;
+    } else if (gate_count >= 30000) {
+        // 中大网络：sqrt常落在此区间，提升切割质量并允许更充分二次配对。
+        MAX_CUTS_PER_NODE = 72;
+        MAX_PAIRS_PER_NODE = 24;
+        MAX_DISJOINT_PAIRS_PER_NODE = 16;
+        LAYER_CUTS_PER_NODE = 3;
+        MAX_I5_CANDIDATES = 6;
+        MAPPING_ROUNDS = 6;
+        POSTPACK_PASS1_SCAN_WINDOW = 640;
+        POSTPACK_PASS2_MAX_SINGLE = 10000;
+        POSTPACK_PASS2_SCAN_WINDOW = 160;
+        POSTPACK_PASS2_MAX_CHUNKS = 1;
+        PAIR_SEED_MULTIPLIER = 11;
+    } else if (gate_count >= 3000) {
+        MAX_CUTS_PER_NODE = 144;
+        MAX_PAIRS_PER_NODE = 32;
+        MAX_DISJOINT_PAIRS_PER_NODE = 20;
+        LAYER_CUTS_PER_NODE = 3;
+        MAX_I5_CANDIDATES = 8;
+        MAPPING_ROUNDS = 8;
+        POSTPACK_PASS1_SCAN_WINDOW = 640;
+        POSTPACK_PASS2_MAX_SINGLE = 6144;
+        POSTPACK_PASS2_SCAN_WINDOW = 256;
+        POSTPACK_PASS2_MAX_CHUNKS = 2;
+        PAIR_SEED_MULTIPLIER = 14;
+    } else if (gate_count >= 1500) {
+        MAX_CUTS_PER_NODE = 64;
+        MAX_PAIRS_PER_NODE = 20;
+        MAX_DISJOINT_PAIRS_PER_NODE = 12;
+        LAYER_CUTS_PER_NODE = 3;
+        MAX_I5_CANDIDATES = 6;
+        MAPPING_ROUNDS = 5;
+        POSTPACK_PASS1_SCAN_WINDOW = 256;
+        POSTPACK_PASS2_MAX_SINGLE = 2048;
+        POSTPACK_PASS2_SCAN_WINDOW = 192;
+        POSTPACK_PASS2_MAX_CHUNKS = 1;
+        PAIR_SEED_MULTIPLIER = 9;
+    }
+
+    log("Runtime budget: gates=%zu cuts=%d pairs=%d disjoint=%d layer_cuts=%d i5=%d rounds=%d postpack1_win=%d postpack2_limit=%d postpack2_win=%d postpack2_chunks=%d seed_mul=%d\n",
+        gate_count, MAX_CUTS_PER_NODE, MAX_PAIRS_PER_NODE, MAX_DISJOINT_PAIRS_PER_NODE,
+        LAYER_CUTS_PER_NODE, MAX_I5_CANDIDATES, MAPPING_ROUNDS, POSTPACK_PASS1_SCAN_WINDOW,
+        POSTPACK_PASS2_MAX_SINGLE, POSTPACK_PASS2_SCAN_WINDOW, POSTPACK_PASS2_MAX_CHUNKS, PAIR_SEED_MULTIPLIER);
     
     // ABC风格：初始化估计引用计数
     log("Initializing estimated reference counts (ABC-style)...\n");
@@ -2957,17 +3371,22 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     
     // ABC风格：多轮迭代优化
     int mapping_rounds = MAPPING_ROUNDS;
-    if ((int)gates.size() >= 900)
-        mapping_rounds += 2; // 大规模网络额外迭代，优先改善des/i8/i10这类劣化案例
+    if ((int)gates.size() >= 900 && (int)gates.size() < EXTRA_MODE_GATE_LIMIT)
+        mapping_rounds += 1;
     log("\nPhase 2.5: Multi-round mapping optimization (ABC-style, %d rounds)...\n", mapping_rounds);
     for (int round = 1; round <= mapping_rounds; round++) {
         log("  Round %d: %s optimization...\n", round, round == 1 ? "delay" : "area");
-        
+        size_t changed_nodes = 0;
+
         // 更新每个节点的best cut
         for (Cell* node : gates) {
             if (!IsCombinationalGate(node)) continue;
             if (!cell2cuts.count(node) || cell2cuts[node].empty()) continue;
-            
+            bool had_prev = cell2bestcut.count(node);
+            Cut prev_cut;
+            if (had_prev)
+                prev_cut = cell2bestcut[node];
+
             float required = cell2required.count(node) ? cell2required[node] : 1e9f;
             
             Cut* best = nullptr;
@@ -3001,7 +3420,15 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
             }
             
             if (best) {
+                bool changed = true;
+                if (had_prev &&
+                    prev_cut.signature == best->signature &&
+                    prev_cut.leaves.size() == best->leaves.size() &&
+                    CutLeavesEqual(prev_cut.leaves, best->leaves))
+                    changed = false;
                 cell2bestcut[node] = *best;
+                if (changed)
+                    changed_nodes++;
             }
         }
         
@@ -3020,7 +3447,102 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
                 max_delay = max(max_delay, cell2bestcut[node].arrival_time);
             }
         }
-        log("    Round %d result: estimated LUTs=%zu, max_delay=%.1f\n", round, total_area, max_delay);
+        log("    Round %d result: estimated LUTs=%zu, max_delay=%.1f, changed=%zu\n",
+            round, total_area, max_delay, changed_nodes);
+        if (round >= 2 && changed_nodes == 0) {
+            log("    Early stop: best cuts converged at round %d\n", round);
+            break;
+        }
+    }
+
+    // 末尾精确面积恢复：在轻度timing约束下，按ref/deref真实代价选择best cut。
+    int final_area_rounds = FINAL_AREA_RECOVERY_ROUNDS;
+    if (gate_count >= 50000)
+        final_area_rounds = 1;
+    if (final_area_rounds > 0)
+        log("\nPhase 2.75: Exact area-recovery rounds (%d rounds)...\n", final_area_rounds);
+
+    for (int round = 1; round <= final_area_rounds; round++) {
+        size_t changed_nodes = 0;
+
+        for (auto it = gates.rbegin(); it != gates.rend(); ++it) {
+            Cell* node = *it;
+            if (!IsCombinationalGate(node)) continue;
+            if (!cell2cuts.count(node) || cell2cuts[node].empty()) continue;
+            if (!cell2refs.count(node) || cell2refs[node] <= 0) continue;
+            if (!cell2bestcut.count(node)) continue;
+
+            Cut old_cut = cell2bestcut[node];
+            float required = cell2required.count(node) ? cell2required[node] : 1e9f;
+            float relaxed_required = required;
+            if (gate_count >= 10000) {
+                relaxed_required = 1e9f;
+            } else if (required < 1e8f) {
+                relaxed_required += AREA_ROUND_REQUIRED_SLACK;
+                relaxed_required += required * AREA_ROUND_REQUIRED_RELAX;
+            }
+
+            DerefSupportFromCut(&old_cut);
+
+            const Cut* best_cut = nullptr;
+            int best_added = std::numeric_limits<int>::max();
+            double best_flow = std::numeric_limits<double>::infinity();
+
+            for (auto& cut : cell2cuts[node]) {
+                float max_arr = 0.0f;
+                for (auto leaf : cut.leaves) {
+                    Cell* driver = bit2driver.count(leaf) ? bit2driver[leaf] : nullptr;
+                    if (driver && cell2arrival.count(driver))
+                        max_arr = max(max_arr, cell2arrival[driver]);
+                }
+
+                Cut& mutable_cut = const_cast<Cut&>(cut);
+                mutable_cut.arrival_time = max_arr + 1.0f;
+                if (mutable_cut.arrival_time > relaxed_required + EPSILON)
+                    continue;
+
+                mutable_cut.area_flow = ComputeAreaFlowABC(cut.leaves);
+                int added = RefSupportFromCut(&mutable_cut);
+                DerefSupportFromCut(&mutable_cut);
+
+                bool better = false;
+                if (added < best_added)
+                    better = true;
+                else if (added == best_added && mutable_cut.area_flow < best_flow - EPSILON)
+                    better = true;
+                else if (added == best_added && fabs(mutable_cut.area_flow - best_flow) <= EPSILON &&
+                         best_cut && mutable_cut.leaves.size() > best_cut->leaves.size())
+                    better = true;
+                else if (added == best_added && fabs(mutable_cut.area_flow - best_flow) <= EPSILON &&
+                         best_cut && mutable_cut.leaves.size() == best_cut->leaves.size() &&
+                         mutable_cut.depth > best_cut->depth)
+                    better = true;
+
+                if (better) {
+                    best_cut = &mutable_cut;
+                    best_added = added;
+                    best_flow = mutable_cut.area_flow;
+                }
+            }
+
+            if (!best_cut)
+                best_cut = &old_cut;
+
+            RefSupportFromCut(best_cut);
+            bool changed =
+                old_cut.signature != best_cut->signature ||
+                old_cut.leaves.size() != best_cut->leaves.size() ||
+                !CutLeavesEqual(old_cut.leaves, best_cut->leaves);
+            cell2bestcut[node] = *best_cut;
+            if (changed)
+                changed_nodes++;
+        }
+
+        ComputeArrivalTimes(gates);
+        RecomputeRefsFromPOs(module, gates);
+        log("    Final area round %d: changed=%zu\n", round, changed_nodes);
+        if (changed_nodes == 0)
+            break;
     }
 
     // Phase 3: bit-level随机仿真目前不参与映射决策，跳过以提升稳定性和速度
@@ -3082,12 +3604,18 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
         MIN_AREA_GAIN_FOR_NO_SHARE = orig_no_share_gain;
     };
 
+    bool run_layer_modes = (gates.size() < size_t(50000));
+
     // Mode 1: 标准双输出覆盖
-    log("\n=== Covering Mode 1: Standard dual-enabled ===\n");
-    run_dual_covering_mode(lut_infos_dual_mode, single_luts_dual_mode);
+    if (run_layer_modes) {
+        log("\n=== Covering Mode 1: Standard dual-enabled ===\n");
+        run_dual_covering_mode(lut_infos_dual_mode, single_luts_dual_mode);
+    } else {
+        log("\n=== Covering Mode 1: skipped for very large network (%zu gates)\n", gates.size());
+    }
 
     // Mode 2: 激进析取配对覆盖（仅中小规模网络）
-    bool run_extra_modes = (gates.size() <= 50000);
+    bool run_extra_modes = run_layer_modes && (gates.size() <= (size_t)EXTRA_MODE_GATE_LIMIT);
     if (run_extra_modes) {
         log("\n=== Covering Mode 2: Disjoint-aggressive ===\n");
         run_disjoint_aggressive_mode(lut_infos_disjoint_mode, single_luts_disjoint_mode);
@@ -3098,7 +3626,8 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     BuildBestCutSingleCover(module, gates, single_luts_bestcut_mode);
 
     // 对所有模式执行后处理打包
-    PostPackSingleLUTs(module, gates, lut_infos_dual_mode, single_luts_dual_mode);
+    if (run_layer_modes)
+        PostPackSingleLUTs(module, gates, lut_infos_dual_mode, single_luts_dual_mode);
     if (run_extra_modes) {
         PostPackSingleLUTs(module, gates, lut_infos_disjoint_mode, single_luts_disjoint_mode);
     }
@@ -3106,7 +3635,9 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     PostPackSingleLUTs(module, gates, dual_from_bestcut, single_luts_bestcut_mode);
 
     // 比较所有模式的总LUT数，选最优
-    size_t total_mode1 = lut_infos_dual_mode.size() + single_luts_dual_mode.size();
+    size_t total_mode1 = run_layer_modes
+        ? (lut_infos_dual_mode.size() + single_luts_dual_mode.size())
+        : SIZE_MAX;
     size_t total_mode2 = run_extra_modes
         ? (lut_infos_disjoint_mode.size() + single_luts_disjoint_mode.size())
         : SIZE_MAX;
@@ -3175,6 +3706,19 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     
     log("\nFinal: %zu LUT6D + %zu single LUT = %zu total LUTs\n", 
         lut_infos.size(), single_luts.size(), lut_infos.size() + single_luts.size());
+
+    // 恢复全局预算，避免影响后续module。
+    MAX_CUTS_PER_NODE = saved_max_cuts_per_node;
+    MAPPING_ROUNDS = saved_mapping_rounds;
+    MAX_PAIRS_PER_NODE = saved_max_pairs_per_node;
+    MAX_DISJOINT_PAIRS_PER_NODE = saved_max_disjoint_pairs_per_node;
+    LAYER_CUTS_PER_NODE = saved_layer_cuts_per_node;
+    MAX_I5_CANDIDATES = saved_max_i5_candidates;
+    POSTPACK_PASS1_SCAN_WINDOW = saved_postpack_pass1_scan_window;
+    POSTPACK_PASS2_MAX_SINGLE = saved_postpack_pass2_max_single;
+    POSTPACK_PASS2_SCAN_WINDOW = saved_postpack_pass2_scan_window;
+    POSTPACK_PASS2_MAX_CHUNKS = saved_postpack_pass2_max_chunks;
+    PAIR_SEED_MULTIPLIER = saved_pair_seed_multiplier;
 }
 
 // 清理所有全局数据结构，释放内存
@@ -3194,6 +3738,7 @@ void CleanupGlobalDataStructures()
     cell2arrival.clear();
     cell2required.clear();
     cell2bestcut.clear();
+    layer_candidate_cut_cache.clear();
     cell2index.clear();
     orig_fanout.clear();
     processed_nodes.clear();
@@ -3244,6 +3789,10 @@ struct LUT6DMapPass : public Pass {
 		Module *module = design->top_module();
 		if (module == nullptr)
 			log_cmd_error("No top module found.\n");
+        MaybePreMapAigWithAbc(design, module);
+        module = design->top_module();
+        if (module == nullptr)
+            log_cmd_error("No top module found after ABC pre-mapping.\n");
 		log_header(design, "Continuing MapperPass pass.\n");
         LUT6DMapperMain(module);
 		log_pop();

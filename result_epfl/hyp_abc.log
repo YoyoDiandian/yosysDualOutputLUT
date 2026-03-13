@@ -1,0 +1,4 @@
+
+======== ABC command line "read_aiger /Users/yoyowang/Desktop/benchmark/hyp.aig; ps; if -K 6; ps; write_verilog test_output_epfl/hyp_abc_mapped.v"
+[1;37m/Users/yoyowang/Desktop/benchmark/hyp:[0m i/o =  256/  128  lat =    0  and = 214335  lev =24801
+[1;37m/Users/yoyowang/Desktop/benchmark/hyp:[0m i/o =  256/  128  lat =    0  nd = 44508  edge = 198047  aig  =348081  lev = 4194
