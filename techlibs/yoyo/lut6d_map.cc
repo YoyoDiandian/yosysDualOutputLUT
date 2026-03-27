@@ -2,8 +2,12 @@
 #include "kernel/consteval.h"
 #include "kernel/modtools.h"
 #include "kernel/sigtools.h"
+#include "kernel/threading.h"
 #include "kernel/yosys.h"
 #include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <numeric>
 #include <queue>
@@ -35,12 +39,89 @@ static int POSTPACK_PASS2_SCAN_WINDOW = 0; // 第二轮后处理配对扫描窗�
 static int POSTPACK_PASS2_MAX_CHUNKS = 1; // 第二轮后处理最多处理的候选分块数
 static float EPSILON = 0.005f;        // 浮点比较精度
 static int layer_invalid_log_count = 0;
+static size_t current_mapping_gate_count = 0;
+static pool<uint64_t> postpack_forbidden_pair_keys;
+
+enum class CoveringModeOverride {
+    AUTO,
+    STANDARD_DUAL,
+    DISJOINT_AGGRESSIVE,
+    BESTCUT_SINGLE,
+};
+
+static CoveringModeOverride covering_mode_override = CoveringModeOverride::AUTO;
+static bool disable_postpack = false;
+static bool disable_disjoint_mode = false;
+static bool disable_adaptive_budget = false;
+static int mapping_rounds_override = -1;
+static int area_recovery_rounds_override = -1;
+
+static const char *CoveringModeOverrideName(CoveringModeOverride mode)
+{
+    switch (mode) {
+    case CoveringModeOverride::AUTO:
+        return "auto";
+    case CoveringModeOverride::STANDARD_DUAL:
+        return "standard-dual";
+    case CoveringModeOverride::DISJOINT_AGGRESSIVE:
+        return "disjoint-aggressive";
+    case CoveringModeOverride::BESTCUT_SINGLE:
+        return "bestcut-single";
+    }
+    return "unknown";
+}
+
+static bool ParseCoveringModeOverride(const std::string &text, CoveringModeOverride &mode)
+{
+    if (text == "auto") {
+        mode = CoveringModeOverride::AUTO;
+        return true;
+    }
+    if (text == "standard-dual") {
+        mode = CoveringModeOverride::STANDARD_DUAL;
+        return true;
+    }
+    if (text == "disjoint-aggressive") {
+        mode = CoveringModeOverride::DISJOINT_AGGRESSIVE;
+        return true;
+    }
+    if (text == "bestcut-single") {
+        mode = CoveringModeOverride::BESTCUT_SINGLE;
+        return true;
+    }
+    return false;
+}
+
+static int ParseIntOption(const std::string &text, const char *opt_name)
+{
+    char *endptr = nullptr;
+    long value = std::strtol(text.c_str(), &endptr, 10);
+    if (endptr == nullptr || *endptr != '\0')
+        log_cmd_error("lut6d_map option %s expects an integer, got '%s'.\n", opt_name, text.c_str());
+    if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max())
+        log_cmd_error("lut6d_map option %s is out of range: '%s'.\n", opt_name, text.c_str());
+    return int(value);
+}
 
 struct Cut;
+struct LUT6DInfo;
+struct SingleLUTInfo;
 Cut MergeCuts(const Cut &cut1, const Cut &cut2);
-bool RoleValid(Cell* z_node, Cell* z5_node, SigBit i5, const Cut& merged_cut);
+bool RoleValid(Cell* z_node, Cell* z5_node, SigBit i5, const Cut& merged_cut, bool log_errors = true);
+static int ComputeCutPackabilityScore(const Cut &cut);
+static bool PreferPackableCutHeuristic();
+static double PackableCutAreaSlack();
+static void PostPackSingleLUTs(vector<LUT6DInfo> &dual_luts, vector<SingleLUTInfo> &single_luts);
 
 SigBit GetCellOutput(Cell *cell);
+
+static float EndPhaseTimer(PerformanceTimer &timer, const char *label)
+{
+    timer.end();
+    float sec = timer.sec();
+    log("  Timing: %s %.3f s\n", label, sec);
+    return sec;
+}
 
 static size_t DualLutInitWidth(size_t input_count)
 {
@@ -197,15 +278,27 @@ struct Cut {
         if (arrival_time > relaxed_required + EPSILON) return false;
         if (other.arrival_time > relaxed_required + EPSILON) return true;
         // 在timing约束内，选择area更小的
-        if (fabs(area_flow - other.area_flow) > EPSILON)
-            return area_flow < other.area_flow;
+        double area_slack = PackableCutAreaSlack();
+        if (area_flow + area_slack < other.area_flow)
+            return true;
+        if (other.area_flow + area_slack < area_flow)
+            return false;
         if (fabs(arrival_time - other.arrival_time) > EPSILON)
             return arrival_time < other.arrival_time;
-        // 面积轮次下，优先更“深/大”的cut，通常可减少总覆盖节点数
+        if (PreferPackableCutHeuristic()) {
+            int this_pack = ComputeCutPackabilityScore(*this);
+            int other_pack = ComputeCutPackabilityScore(other);
+            if (this_pack != other_pack)
+                return this_pack > other_pack;
+        }
+        bool prefer_compact_cut = current_mapping_gate_count >= 5000;
+        // 大图更需要为dual/postpack保留可配对空间；中小图保留原先更激进的覆盖风格。
         if (leaves.size() != other.leaves.size())
-            return leaves.size() > other.leaves.size();
+            return prefer_compact_cut ? leaves.size() < other.leaves.size()
+                                      : leaves.size() > other.leaves.size();
         if (depth != other.depth)
-            return depth > other.depth;
+            return prefer_compact_cut ? depth < other.depth
+                                      : depth > other.depth;
         return signature < other.signature;
     }
     
@@ -262,6 +355,19 @@ static uint64_t HashCutLeaves(const pool<SigBit> &leaves)
     }
     h ^= uint64_t(ordered.size()) * 0x9e3779b97f4a7c15ULL;
     h ^= (h >> 32);
+    return h;
+}
+
+static uint64_t MakeSigBitPairKey(SigBit a, SigBit b)
+{
+    if (LessSigBitStable(b, a))
+        std::swap(a, b);
+
+    uint64_t h1 = HashSigBitStable(a);
+    uint64_t h2 = HashSigBitStable(b);
+    uint64_t h = h1;
+    h ^= h2 + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    h ^= 0x517cc1b727220a95ULL;
     return h;
 }
 
@@ -619,11 +725,14 @@ void GetTopoSortedGates(vector<Cell *> &gates) {
 }
 
 // 优化：添加缓存避免重复计算
-State StateEval(dict<SigBit, State> &bit_map, SigBit out)
+State StateEval(dict<SigBit, State> &bit_map, SigBit out, bool log_errors = true)
 {
 	if (bit_map.count(out)) {
 		return bit_map[out];
 	}
+    if (out.wire == nullptr && (out.data == State::S0 || out.data == State::S1)) {
+        return out.data;
+    }
 	Cell *cell = bit2driver[out];
 	if (!cell) {
 		return State::Sx;
@@ -633,14 +742,15 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
 	if (IsAND(cell)) {
 		SigBit tout = bits[0];
 		for (size_t i = 1; i < bits.size(); i++) {
-			State tmp = StateEval(bit_map, bits[i]);
+			State tmp = StateEval(bit_map, bits[i], log_errors);
 			if (tmp == State::S0) {
 				bit_map[tout] = State::S0;
 				return State::S0;
 			} else if (tmp == State::S1) {
 				continue;
 			} else {
-				log_error("Cannot evaluate %s \n", log_signal(tout));
+				if (log_errors)
+					log_error("Cannot evaluate %s \n", log_signal(tout));
 				bit_map[tout] = State::Sx;
 				return State::Sx;
 			}
@@ -648,7 +758,7 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
 		return State::S1;
 	} else if (IsNOT(cell)) {
 		SigBit tout = bits[0];
-		State tmp = StateEval(bit_map, bits[1]);
+		State tmp = StateEval(bit_map, bits[1], log_errors);
 		if (tmp == State::S0) {
 			bit_map[tout] = State::S1;
 			return State::S1;
@@ -656,7 +766,8 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
 			bit_map[tout] = State::S0;
 			return State::S0;
 		} else {
-			log_error("Cannot evaluate %s \n", log_signal(tout));
+			if (log_errors)
+				log_error("Cannot evaluate %s \n", log_signal(tout));
 		}
 	} else if (cell->type == ID($lut)) {
         int width = 0;
@@ -674,7 +785,7 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
         int idx = 0;
         int max_input = std::min<int>(width, int(bits.size()) - 1);
         for (int i = 0; i < max_input; i++) {
-            State tmp = StateEval(bit_map, bits[i + 1]);
+            State tmp = StateEval(bit_map, bits[i + 1], log_errors);
             if (tmp != State::S0 && tmp != State::S1) {
                 bit_map[bits[0]] = State::Sx;
                 return State::Sx;
@@ -691,7 +802,8 @@ State StateEval(dict<SigBit, State> &bit_map, SigBit out)
         bit_map[bits[0]] = y_val;
         return y_val;
 	} else {
-		log_error("unhandled cell %s \n", cell->type.c_str());
+		if (log_errors)
+			log_error("unhandled cell %s \n", cell->type.c_str());
 	}
 	return State::Sx;
 }
@@ -781,6 +893,77 @@ double ComputeAreaFlowABC(const pool<SigBit>& leaves) {
         flow += leaf_flow / refs;
     }
     return flow;
+}
+
+static bool CutLeafAffectsNode(Cell *node, const pool<SigBit> &leaves, const SigBit &leaf)
+{
+    if (!node || !leaves.count(leaf))
+        return true;
+
+    vector<SigBit> other_leaves;
+    vector<SigBit> ordered_leaves = SortedSigBits(leaves);
+    other_leaves.reserve(ordered_leaves.size());
+    for (auto bit : ordered_leaves) {
+        if (bit != leaf)
+            other_leaves.push_back(bit);
+    }
+
+    if (other_leaves.size() >= sizeof(size_t) * 8)
+        return true;
+
+    SigBit output = GetCellOutput(node);
+    size_t bits_num = size_t(1) << other_leaves.size();
+    for (size_t mask = 0; mask < bits_num; mask++) {
+        dict<SigBit, State> bit_map0;
+        for (size_t i = 0; i < other_leaves.size(); i++) {
+            State val = ((mask >> i) & 1) ? State::S1 : State::S0;
+            bit_map0[other_leaves[i]] = val;
+        }
+
+        dict<SigBit, State> bit_map1 = bit_map0;
+        bit_map0[leaf] = State::S0;
+        bit_map1[leaf] = State::S1;
+        State out0 = StateEval(bit_map0, output);
+        State out1 = StateEval(bit_map1, output);
+        if (out0 != out1)
+            return true;
+    }
+
+    return false;
+}
+
+static void ReduceCutFunctionalSupport(Cell *node, Cut &cut)
+{
+    if (!node || cut.leaves.empty() || cut.leaves.size() > size_t(LUT_SIZE))
+        return;
+
+    bool changed = false;
+    bool removed = true;
+    while (removed) {
+        removed = false;
+        vector<SigBit> ordered_leaves = SortedSigBits(cut.leaves);
+        for (auto leaf : ordered_leaves) {
+            if (cut.leaves.size() <= 1)
+                break;
+            if (leaf.wire == nullptr) {
+                cut.leaves.erase(leaf);
+                removed = true;
+                changed = true;
+                continue;
+            }
+            if (!CutLeafAffectsNode(node, cut.leaves, leaf)) {
+                cut.leaves.erase(leaf);
+                removed = true;
+                changed = true;
+            }
+        }
+    }
+
+    if (!changed)
+        return;
+
+    cut.computeSignature();
+    cut.area_flow = ComputeAreaFlowABC(cut.leaves);
 }
 
 // ABC风格：ref-count驱动的面积恢复
@@ -1080,6 +1263,7 @@ void GenerateCutsForNode(Cell *node, vector<Cut> &cuts) {
     for (auto input : inputs) {
         trivial_cut.leaves.insert(input);
     }
+    ReduceCutFunctionalSupport(node, trivial_cut);
     trivial_cut.internal.insert(node);
     trivial_cut.depth = 1;  // 单个门的深度为1
     trivial_cut.arrival_time = 0.0f;
@@ -1121,6 +1305,7 @@ void GenerateCutsForNode(Cell *node, vector<Cut> &cuts) {
             for (auto &input_cut : cell2cuts[input_cell]) {
                 Cut new_cut = input_cut;
                 new_cut.internal.insert(node);
+                ReduceCutFunctionalSupport(node, new_cut);
                 new_cut.depth = input_cut.depth + 1;
                 new_cut.arrival_time = 0.0f;
                 new_cut.area_flow = ComputeAreaFlowABC(new_cut.leaves);
@@ -1194,6 +1379,7 @@ void GenerateCutsForNode(Cell *node, vector<Cut> &cuts) {
                 
                 Cut merged = MergeCuts(c1, c2);
                 merged.internal.insert(node);
+                ReduceCutFunctionalSupport(node, merged);
                 merged.depth++;
                 // area_flow已在MergeCuts中计算
                 
@@ -1238,7 +1424,7 @@ void GenerateCutsForNode(Cell *node, vector<Cut> &cuts) {
 }
 
 // 检查是否满足Z5=Z在I5=0时的cofactor关系
-bool RoleValid(Cell* z_node, Cell* z5_node, SigBit i5, const Cut& merged_cut) {
+bool RoleValid(Cell* z_node, Cell* z5_node, SigBit i5, const Cut& merged_cut, bool log_errors) {
     if (!z_node || !z5_node) return false;
     if (i5.wire == nullptr) return true;
     if (!merged_cut.leaves.count(i5)) return true;
@@ -1259,8 +1445,8 @@ bool RoleValid(Cell* z_node, Cell* z5_node, SigBit i5, const Cut& merged_cut) {
             bit_map[other_leaves[n]] = ((i & (1 << n)) != 0) ? State::S1 : State::S0;
         }
         bit_map[i5] = State::S0;
-        State z_val = StateEval(bit_map, z_out);
-        State z5_val = StateEval(bit_map, z5_out);
+        State z_val = StateEval(bit_map, z_out, log_errors);
+        State z5_val = StateEval(bit_map, z5_out, log_errors);
         if (z_val != z5_val) return false;
     }
     return true;
@@ -1286,7 +1472,8 @@ static void CollectPreferredSelectors(const pool<SigBit>& potential_I5, const Cu
     }
 }
 
-bool VerifyLUT6DMapping(const LUT6DInfo& lut6d_info, Cell* node, Cell* cand, bool isZ) {
+bool VerifyLUT6DMapping(const LUT6DInfo& lut6d_info, Cell* node, Cell* cand, bool isZ,
+                        bool log_errors = true) {
     if (!node || !cand) return false;
     if (lut6d_info.inputs.empty()) return false;
     if (lut6d_info.inputs.size() < 4 || lut6d_info.inputs.size() > 6) return false;
@@ -1335,8 +1522,8 @@ bool VerifyLUT6DMapping(const LUT6DInfo& lut6d_info, Cell* node, Cell* cand, boo
             if (val == State::S1) idx |= (size_t(1) << i);
         }
 
-        State exp_z = StateEval(bit_map, z_out);
-        State exp_z5 = StateEval(bit_map, z5_out);
+        State exp_z = StateEval(bit_map, z_out, log_errors);
+        State exp_z5 = StateEval(bit_map, z5_out, log_errors);
         if (exp_z != State::S0 && exp_z != State::S1) return false;
         if (exp_z5 != State::S0 && exp_z5 != State::S1) return false;
 
@@ -1510,7 +1697,784 @@ struct DualOutputCandidate {
     size_t coverageCount() const { return covers.size(); }
 };
 
-static void BuildLUT6DInfoFromCandidate(const DualOutputCandidate& cand, LUT6DInfo& lut_info)
+static void GetCandidateOutputs(const DualOutputCandidate &cand, vector<SigBit> &outputs)
+{
+    outputs.clear();
+    if (cand.root1)
+        outputs.push_back(GetCellOutput(cand.root1));
+    if (cand.root2)
+        outputs.push_back(GetCellOutput(cand.root2));
+}
+
+static void GetCellFaninDrivers(Cell *cell, vector<Cell*> &fanins)
+{
+    fanins.clear();
+    if (!cell || !IsCombinationalGate(cell))
+        return;
+
+    pool<Cell*> seen;
+    vector<SigBit> inputs;
+    GetCellInputsVector(cell, inputs);
+    for (auto bit : inputs) {
+        Cell *driver = bit2driver.count(bit) ? bit2driver[bit] : nullptr;
+        if (!driver || !IsCombinationalGate(driver) || driver == cell)
+            continue;
+        if (seen.insert(driver).second)
+            fanins.push_back(driver);
+    }
+    sort(fanins.begin(), fanins.end(), LessCellStable);
+}
+
+static void GetCellFanoutDrivers(Cell *cell, vector<Cell*> &fanouts)
+{
+    fanouts.clear();
+    if (!cell || !IsCombinationalGate(cell))
+        return;
+
+    SigBit output = GetCellOutput(cell);
+    if (!bit2reader.count(output))
+        return;
+
+    pool<Cell*> seen;
+    for (Cell *reader : bit2reader[output]) {
+        if (!reader || !IsCombinationalGate(reader) || reader == cell)
+            continue;
+        if (seen.insert(reader).second)
+            fanouts.push_back(reader);
+    }
+    sort(fanouts.begin(), fanouts.end(), LessCellStable);
+}
+
+static void CollectRuntimeExpansionPairSeeds(Cell *node, size_t pair_seed_limit, pool<Cell*> &potential_pairs)
+{
+    if (!node || pair_seed_limit == 0 || potential_pairs.size() >= pair_seed_limit)
+        return;
+
+    size_t root_level = cell2level.count(node) ? cell2level[node] : 0;
+    size_t visit_budget = std::max<size_t>(24, pair_seed_limit * 6);
+    queue<Cell*> worklist;
+    pool<Cell*> visited;
+
+    worklist.push(node);
+    visited.insert(node);
+
+    auto maybe_add_pair = [&](Cell *cand) {
+        if (!cand || cand == node || !IsCombinationalGate(cand))
+            return;
+        if (processed_nodes.count(cand))
+            return;
+        size_t cand_level = cell2level.count(cand) ? cell2level[cand] : root_level;
+        if (cand_level <= root_level)
+            potential_pairs.insert(cand);
+    };
+
+    auto enqueue = [&](Cell *cand) {
+        if (!cand || !IsCombinationalGate(cand))
+            return;
+        if (visited.count(cand))
+            return;
+        if (visited.size() >= visit_budget)
+            return;
+        visited.insert(cand);
+        worklist.push(cand);
+    };
+
+    while (!worklist.empty() && potential_pairs.size() < pair_seed_limit) {
+        Cell *current = worklist.front();
+        worklist.pop();
+
+        size_t current_level = cell2level.count(current) ? cell2level[current] : root_level;
+
+        vector<Cell*> fanins;
+        GetCellFaninDrivers(current, fanins);
+        for (Cell *fanin : fanins) {
+            maybe_add_pair(fanin);
+            enqueue(fanin);
+            if (potential_pairs.size() >= pair_seed_limit)
+                break;
+        }
+        if (potential_pairs.size() >= pair_seed_limit)
+            break;
+
+        if (current_level <= root_level) {
+            vector<Cell*> fanouts;
+            GetCellFanoutDrivers(current, fanouts);
+            for (Cell *fanout : fanouts) {
+                maybe_add_pair(fanout);
+                enqueue(fanout);
+                if (potential_pairs.size() >= pair_seed_limit)
+                    break;
+            }
+        }
+    }
+}
+
+static void GatherSelectedCandidateDeps(const DualOutputCandidate &cand,
+                                       const dict<SigBit, int> &output_owner,
+                                       const dict<SigBit, pool<int>> &leaf_consumers,
+                                       pool<int> &providers,
+                                       pool<int> &consumers)
+{
+    providers.clear();
+    consumers.clear();
+
+    for (auto leaf : cand.merged_cut.leaves) {
+        if (output_owner.count(leaf))
+            providers.insert(output_owner.at(leaf));
+    }
+
+    vector<SigBit> outputs;
+    GetCandidateOutputs(cand, outputs);
+    for (auto output : outputs) {
+        if (!leaf_consumers.count(output))
+            continue;
+        for (int idx : leaf_consumers.at(output))
+            consumers.insert(idx);
+    }
+}
+
+static bool SelectedCandidateReachesAny(int start,
+                                        const pool<int> &targets,
+                                        const vector<vector<int>> &forward_edges)
+{
+    if (targets.count(start))
+        return true;
+
+    queue<int> worklist;
+    pool<int> visited;
+    worklist.push(start);
+    visited.insert(start);
+
+    while (!worklist.empty()) {
+        int idx = worklist.front();
+        worklist.pop();
+        if (idx < 0 || idx >= int(forward_edges.size()))
+            continue;
+        for (int next : forward_edges[idx]) {
+            if (targets.count(next))
+                return true;
+            if (visited.insert(next).second)
+                worklist.push(next);
+        }
+    }
+    return false;
+}
+
+static bool CandidateKeepsSelectedDag(const DualOutputCandidate &cand,
+                                      const dict<SigBit, int> &output_owner,
+                                      const dict<SigBit, pool<int>> &leaf_consumers,
+                                      const vector<vector<int>> &forward_edges)
+{
+    pool<int> providers, consumers;
+    GatherSelectedCandidateDeps(cand, output_owner, leaf_consumers, providers, consumers);
+    if (providers.empty() || consumers.empty())
+        return true;
+
+    for (int consumer : consumers) {
+        if (providers.count(consumer))
+            return false;
+        if (SelectedCandidateReachesAny(consumer, providers, forward_edges))
+            return false;
+    }
+    return true;
+}
+
+static void AddCandidateToSelectedDagState(const DualOutputCandidate &cand,
+                                           int selected_idx,
+                                           dict<SigBit, int> &output_owner,
+                                           dict<SigBit, pool<int>> &leaf_consumers,
+                                           vector<vector<int>> &forward_edges)
+{
+    pool<int> providers, consumers;
+    GatherSelectedCandidateDeps(cand, output_owner, leaf_consumers, providers, consumers);
+    if (selected_idx >= int(forward_edges.size()))
+        forward_edges.resize(selected_idx + 1);
+    for (int provider : providers)
+        forward_edges[provider].push_back(selected_idx);
+    for (int consumer : consumers)
+        forward_edges[selected_idx].push_back(consumer);
+
+    vector<SigBit> outputs;
+    GetCandidateOutputs(cand, outputs);
+    for (SigBit output : outputs)
+        output_owner[output] = selected_idx;
+    for (SigBit leaf : cand.merged_cut.leaves)
+        leaf_consumers[leaf].insert(selected_idx);
+}
+
+static bool BuildSelectedCandidateDagState(const vector<DualOutputCandidate> &selected_candidates,
+                                           dict<SigBit, int> &output_owner,
+                                           dict<SigBit, pool<int>> &leaf_consumers,
+                                           vector<vector<int>> &forward_edges)
+{
+    output_owner.clear();
+    leaf_consumers.clear();
+    forward_edges.clear();
+
+    pool<Cell*> used_nodes;
+    for (int idx = 0; idx < int(selected_candidates.size()); idx++) {
+        const auto &cand = selected_candidates[idx];
+        if (!cand.root1)
+            return false;
+        if (!used_nodes.insert(cand.root1).second)
+            return false;
+        if (cand.root2 && !used_nodes.insert(cand.root2).second)
+            return false;
+        if (!CandidateKeepsSelectedDag(cand, output_owner, leaf_consumers, forward_edges))
+            return false;
+        AddCandidateToSelectedDagState(cand, idx, output_owner, leaf_consumers, forward_edges);
+    }
+    return true;
+}
+
+static void RebuildNextLayerSignalsFromSelected(const vector<DualOutputCandidate> &selected_candidates,
+                                                pool<SigBit> &next_layer_signals)
+{
+    next_layer_signals.clear();
+    for (const auto &cand : selected_candidates) {
+        for (SigBit leaf : cand.merged_cut.leaves) {
+            if (!prime_inputs.count(leaf))
+                next_layer_signals.insert(leaf);
+        }
+    }
+}
+
+struct LocalSolutionMetrics {
+    bool valid;
+    int lut_count;
+    int fresh_nonpi_leaves;
+    int union_nonpi_leaves;
+    int total_leaf_count;
+    double total_area_gain;
+    double total_score;
+
+    LocalSolutionMetrics() : valid(false), lut_count(0), fresh_nonpi_leaves(0),
+                             union_nonpi_leaves(0), total_leaf_count(0),
+                             total_area_gain(0.0), total_score(0.0) {}
+};
+
+struct LocalCandidateSolution {
+    vector<const DualOutputCandidate*> chosen;
+    LocalSolutionMetrics metrics;
+};
+
+static void GetCandidateRoots(const DualOutputCandidate &cand, vector<Cell*> &roots)
+{
+    roots.clear();
+    if (cand.root1)
+        roots.push_back(cand.root1);
+    if (cand.root2)
+        roots.push_back(cand.root2);
+}
+
+static LocalSolutionMetrics EvaluateLocalSolutionMetrics(const vector<const DualOutputCandidate*> &chosen,
+                                                         const pool<SigBit> &external_nonpi_leaves)
+{
+    LocalSolutionMetrics metrics;
+    metrics.valid = true;
+    metrics.lut_count = int(chosen.size());
+
+    pool<SigBit> local_nonpi_leaves;
+    for (const DualOutputCandidate *cand : chosen) {
+        if (!cand)
+            continue;
+        metrics.total_leaf_count += int(cand->merged_cut.leaves.size());
+        metrics.total_area_gain += cand->area_gain;
+        metrics.total_score += cand->score;
+        for (SigBit leaf : cand->merged_cut.leaves) {
+            if (!prime_inputs.count(leaf))
+                local_nonpi_leaves.insert(leaf);
+        }
+    }
+
+    metrics.union_nonpi_leaves = int(local_nonpi_leaves.size());
+    for (SigBit leaf : local_nonpi_leaves) {
+        if (!external_nonpi_leaves.count(leaf))
+            metrics.fresh_nonpi_leaves++;
+    }
+    return metrics;
+}
+
+static bool LocalSolutionMetricsBetter(const LocalSolutionMetrics &cand,
+                                       const LocalSolutionMetrics &best)
+{
+    if (!cand.valid)
+        return false;
+    if (!best.valid)
+        return true;
+    if (cand.lut_count < best.lut_count) {
+        int lut_gain = best.lut_count - cand.lut_count;
+        int fresh_growth = cand.fresh_nonpi_leaves - best.fresh_nonpi_leaves;
+        int union_growth = cand.union_nonpi_leaves - best.union_nonpi_leaves;
+        int leaf_growth = cand.total_leaf_count - best.total_leaf_count;
+        bool medium_graph = current_mapping_gate_count <= 5000;
+        int max_fresh_growth = medium_graph ? lut_gain : 0;
+        int max_union_growth = medium_graph ? lut_gain : 0;
+        int max_leaf_growth = medium_graph ? 2 * lut_gain : lut_gain;
+        if (fresh_growth > max_fresh_growth)
+            return false;
+        if (union_growth > max_union_growth)
+            return false;
+        if (leaf_growth > max_leaf_growth)
+            return false;
+        return true;
+    }
+    if (cand.lut_count > best.lut_count)
+        return false;
+
+    if (current_mapping_gate_count > 5000)
+        return false;
+
+    if (cand.fresh_nonpi_leaves + 1 < best.fresh_nonpi_leaves &&
+        cand.total_leaf_count <= best.total_leaf_count + 1)
+        return true;
+    if (cand.fresh_nonpi_leaves != best.fresh_nonpi_leaves)
+        return false;
+    if (cand.union_nonpi_leaves + 1 < best.union_nonpi_leaves &&
+        cand.total_leaf_count <= best.total_leaf_count)
+        return true;
+    if (cand.union_nonpi_leaves != best.union_nonpi_leaves)
+        return false;
+    if (cand.total_leaf_count + 2 < best.total_leaf_count)
+        return true;
+    if (fabs(cand.total_area_gain - best.total_area_gain) > EPSILON)
+        return cand.total_area_gain > best.total_area_gain;
+    if (fabs(cand.total_score - best.total_score) > EPSILON)
+        return cand.total_score > best.total_score;
+    return false;
+}
+
+static bool LocalSolutionMetricsEqual(const LocalSolutionMetrics &a,
+                                      const LocalSolutionMetrics &b)
+{
+    return a.valid == b.valid &&
+           a.lut_count == b.lut_count &&
+           a.fresh_nonpi_leaves == b.fresh_nonpi_leaves &&
+           a.union_nonpi_leaves == b.union_nonpi_leaves &&
+           a.total_leaf_count == b.total_leaf_count &&
+           fabs(a.total_area_gain - b.total_area_gain) <= EPSILON &&
+           fabs(a.total_score - b.total_score) <= EPSILON;
+}
+
+static bool CandidateUsesBlockedRoot(const DualOutputCandidate &cand, const pool<Cell*> &blocked_roots)
+{
+    if (cand.root1 && blocked_roots.count(cand.root1))
+        return true;
+    if (cand.root2 && blocked_roots.count(cand.root2))
+        return true;
+    return false;
+}
+
+static bool CandidateOverlapsCoveredOutputs(const DualOutputCandidate &cand,
+                                            const pool<SigBit> &covered_outputs)
+{
+    for (SigBit sig : cand.covers) {
+        if (covered_outputs.count(sig))
+            return true;
+    }
+    return false;
+}
+
+static bool CandidateRootConflictWithChosen(const DualOutputCandidate &cand,
+                                            const pool<Cell*> &used_roots)
+{
+    if (cand.root1 && used_roots.count(cand.root1))
+        return true;
+    if (cand.root2 && used_roots.count(cand.root2))
+        return true;
+    return false;
+}
+
+static bool OrderLocalSolutionTopologically(const vector<const DualOutputCandidate*> &chosen,
+                                            vector<const DualOutputCandidate*> &ordered)
+{
+    ordered.clear();
+    if (chosen.empty())
+        return true;
+
+    int n = int(chosen.size());
+    dict<SigBit, int> output_owner;
+    vector<vector<int>> edges(n);
+    vector<int> indegree(n, 0);
+
+    for (int idx = 0; idx < n; idx++) {
+        if (!chosen[idx])
+            return false;
+        vector<SigBit> outputs;
+        GetCandidateOutputs(*chosen[idx], outputs);
+        for (SigBit output : outputs) {
+            if (output_owner.count(output))
+                return false;
+            output_owner[output] = idx;
+        }
+    }
+
+    for (int consumer = 0; consumer < n; consumer++) {
+        for (SigBit leaf : chosen[consumer]->merged_cut.leaves) {
+            if (!output_owner.count(leaf))
+                continue;
+            int provider = output_owner.at(leaf);
+            if (provider == consumer)
+                return false;
+            edges[provider].push_back(consumer);
+            indegree[consumer]++;
+        }
+    }
+
+    pool<int> emitted;
+    while (int(ordered.size()) < n) {
+        int pick = -1;
+        for (int idx = 0; idx < n; idx++) {
+            if (emitted.count(idx) || indegree[idx] != 0)
+                continue;
+            if (pick < 0 ||
+                chosen[idx]->score > chosen[pick]->score + EPSILON ||
+                (fabs(chosen[idx]->score - chosen[pick]->score) <= EPSILON &&
+                 LessCellStable(chosen[idx]->root1, chosen[pick]->root1))) {
+                pick = idx;
+            }
+        }
+        if (pick < 0)
+            return false;
+        emitted.insert(pick);
+        ordered.push_back(chosen[pick]);
+        for (int next : edges[pick])
+            indegree[next]--;
+    }
+
+    return true;
+}
+
+static void InsertLocalSolution(vector<LocalCandidateSolution> &best_solutions,
+                                const vector<const DualOutputCandidate*> &chosen,
+                                const pool<SigBit> &external_nonpi_leaves,
+                                const LocalSolutionMetrics &baseline_metrics,
+                                size_t keep_limit)
+{
+    LocalCandidateSolution item;
+    item.chosen = chosen;
+    item.metrics = EvaluateLocalSolutionMetrics(chosen, external_nonpi_leaves);
+    if (!LocalSolutionMetricsBetter(item.metrics, baseline_metrics))
+        return;
+
+    for (const auto &existing : best_solutions) {
+        if (existing.chosen.size() != item.chosen.size())
+            continue;
+        bool same = true;
+        for (size_t i = 0; i < item.chosen.size(); i++) {
+            const DualOutputCandidate *a = item.chosen[i];
+            const DualOutputCandidate *b = existing.chosen[i];
+            if (!a || !b || a->root1 != b->root1 || a->root2 != b->root2 ||
+                a->merged_cut.signature != b->merged_cut.signature ||
+                a->I5 != b->I5 || a->isZ != b->isZ) {
+                same = false;
+                break;
+            }
+        }
+        if (same && LocalSolutionMetricsEqual(existing.metrics, item.metrics))
+            return;
+    }
+
+    auto insert_pos = best_solutions.begin();
+    while (insert_pos != best_solutions.end() &&
+           !LocalSolutionMetricsBetter(item.metrics, insert_pos->metrics))
+        ++insert_pos;
+    best_solutions.insert(insert_pos, item);
+    if (best_solutions.size() > keep_limit)
+        best_solutions.resize(keep_limit);
+}
+
+static void SearchLocalCoverSolutions(const vector<SigBit> &target_outputs,
+                                      const vector<const DualOutputCandidate*> &candidate_pool,
+                                      const dict<SigBit, vector<int>> &output_to_candidates,
+                                      const pool<SigBit> &external_nonpi_leaves,
+                                      const LocalSolutionMetrics &baseline_metrics,
+                                      vector<const DualOutputCandidate*> &chosen,
+                                      pool<SigBit> &covered_outputs,
+                                      pool<Cell*> &used_roots,
+                                      vector<LocalCandidateSolution> &best_solutions,
+                                      size_t keep_limit)
+{
+    if (covered_outputs.size() == target_outputs.size()) {
+        InsertLocalSolution(best_solutions, chosen, external_nonpi_leaves,
+                            baseline_metrics, keep_limit);
+        return;
+    }
+
+    int current_best_count = baseline_metrics.lut_count;
+    if (!best_solutions.empty())
+        current_best_count = std::min(current_best_count, best_solutions.front().metrics.lut_count);
+
+    int remaining = int(target_outputs.size() - covered_outputs.size());
+    int optimistic = int(chosen.size()) + (remaining + 1) / 2;
+    if (optimistic > current_best_count)
+        return;
+    if (int(chosen.size()) > baseline_metrics.lut_count)
+        return;
+
+    SigBit pivot = State::Sx;
+    vector<int> pivot_options;
+    size_t pivot_option_count = std::numeric_limits<size_t>::max();
+    for (SigBit output : target_outputs) {
+        if (covered_outputs.count(output))
+            continue;
+        if (!output_to_candidates.count(output))
+            return;
+        vector<int> feasible;
+        for (int cand_idx : output_to_candidates.at(output)) {
+            const DualOutputCandidate *cand = candidate_pool[cand_idx];
+            if (!cand)
+                continue;
+            if (CandidateRootConflictWithChosen(*cand, used_roots))
+                continue;
+            if (CandidateOverlapsCoveredOutputs(*cand, covered_outputs))
+                continue;
+            feasible.push_back(cand_idx);
+        }
+        if (feasible.empty())
+            return;
+        if (feasible.size() < pivot_option_count) {
+            pivot = output;
+            pivot_options.swap(feasible);
+            pivot_option_count = pivot_options.size();
+            if (pivot_option_count <= 1)
+                break;
+        }
+    }
+
+    (void)pivot;
+    for (int cand_idx : pivot_options) {
+        const DualOutputCandidate *cand = candidate_pool[cand_idx];
+        if (!cand)
+            continue;
+        vector<Cell*> roots;
+        GetCandidateRoots(*cand, roots);
+        for (Cell *root : roots)
+            used_roots.insert(root);
+        for (SigBit output : cand->covers)
+            covered_outputs.insert(output);
+        chosen.push_back(cand);
+
+        SearchLocalCoverSolutions(target_outputs, candidate_pool, output_to_candidates,
+                                  external_nonpi_leaves, baseline_metrics,
+                                  chosen, covered_outputs, used_roots,
+                                  best_solutions, keep_limit);
+
+        chosen.pop_back();
+        for (SigBit output : cand->covers)
+            covered_outputs.erase(output);
+        for (Cell *root : roots)
+            used_roots.erase(root);
+    }
+}
+
+static size_t ImproveLayerSelectionLocally(const vector<DualOutputCandidate> &all_candidates,
+                                           vector<DualOutputCandidate> &selected_candidates)
+{
+    if (current_mapping_gate_count < 3000 || current_mapping_gate_count > 5000)
+        return 0;
+    if (selected_candidates.size() < 2 || all_candidates.empty())
+        return 0;
+
+    vector<const DualOutputCandidate*> search_candidates;
+    search_candidates.reserve(all_candidates.size());
+    for (const auto &cand : all_candidates) {
+        if (cand.coverageCount() == 0)
+            continue;
+        search_candidates.push_back(&cand);
+    }
+    if (search_candidates.empty())
+        return 0;
+
+    auto local_candidate_less = [](const DualOutputCandidate *a, const DualOutputCandidate *b) {
+        if (a->coverageCount() != b->coverageCount())
+            return a->coverageCount() > b->coverageCount();
+        if (a->isDual() != b->isDual())
+            return a->isDual() > b->isDual();
+        if (a->merged_cut.leaves.size() != b->merged_cut.leaves.size())
+            return a->merged_cut.leaves.size() < b->merged_cut.leaves.size();
+        if (a->shared_inputs != b->shared_inputs)
+            return a->shared_inputs > b->shared_inputs;
+        if (fabs(a->area_gain - b->area_gain) > EPSILON)
+            return a->area_gain > b->area_gain;
+        if (fabs(a->score - b->score) > EPSILON)
+            return a->score > b->score;
+        if (a->root1 != b->root1)
+            return LessCellStable(a->root1, b->root1);
+        if (a->root2 != b->root2)
+            return LessCellStable(a->root2, b->root2);
+        return a->merged_cut.signature < b->merged_cut.signature;
+    };
+    sort(search_candidates.begin(), search_candidates.end(), local_candidate_less);
+
+    size_t scan_limit = std::min<size_t>(search_candidates.size(), 1536);
+    size_t replacements = 0;
+    size_t improve_budget = 24;
+    const size_t max_affected_selected = 3;
+    const size_t max_target_outputs = 6;
+    const size_t max_local_candidates = 48;
+    const size_t max_kept_solutions = 8;
+
+    for (size_t attempt = 0; attempt < improve_budget; attempt++) {
+        dict<Cell*, int> root_owner;
+        dict<SigBit, int> cover_owner;
+        for (int idx = 0; idx < int(selected_candidates.size()); idx++) {
+            const auto &cand = selected_candidates[idx];
+            if (cand.root1)
+                root_owner[cand.root1] = idx;
+            if (cand.root2)
+                root_owner[cand.root2] = idx;
+            for (SigBit output : cand.covers)
+                cover_owner[output] = idx;
+        }
+
+        bool changed = false;
+        for (size_t cand_idx = 0; cand_idx < scan_limit; cand_idx++) {
+            const DualOutputCandidate &cand = *search_candidates[cand_idx];
+            if (!cand.isDual() || cand.coverageCount() == 0)
+                continue;
+
+            pool<int> affected_idx_set;
+            for (SigBit output : cand.covers) {
+                if (cover_owner.count(output))
+                    affected_idx_set.insert(cover_owner.at(output));
+            }
+            if (cand.root1 && root_owner.count(cand.root1))
+                affected_idx_set.insert(root_owner.at(cand.root1));
+            if (cand.root2 && root_owner.count(cand.root2))
+                affected_idx_set.insert(root_owner.at(cand.root2));
+            if (affected_idx_set.size() < 2 || affected_idx_set.size() > max_affected_selected)
+                continue;
+
+            vector<int> affected_indices;
+            for (int idx : affected_idx_set)
+                affected_indices.push_back(idx);
+            sort(affected_indices.begin(), affected_indices.end());
+
+            pool<SigBit> target_output_set;
+            for (int idx : affected_indices) {
+                for (SigBit output : selected_candidates[idx].covers)
+                    target_output_set.insert(output);
+            }
+            if (target_output_set.size() < 2 || target_output_set.size() > max_target_outputs)
+                continue;
+
+            pool<Cell*> blocked_roots;
+            pool<SigBit> external_nonpi_leaves;
+            vector<const DualOutputCandidate*> baseline_solution;
+            baseline_solution.reserve(affected_indices.size());
+            for (int idx = 0; idx < int(selected_candidates.size()); idx++) {
+                bool in_affected = std::binary_search(affected_indices.begin(),
+                                                      affected_indices.end(), idx);
+                if (in_affected) {
+                    baseline_solution.push_back(&selected_candidates[idx]);
+                    continue;
+                }
+                if (selected_candidates[idx].root1)
+                    blocked_roots.insert(selected_candidates[idx].root1);
+                if (selected_candidates[idx].root2)
+                    blocked_roots.insert(selected_candidates[idx].root2);
+                for (SigBit leaf : selected_candidates[idx].merged_cut.leaves) {
+                    if (!prime_inputs.count(leaf))
+                        external_nonpi_leaves.insert(leaf);
+                }
+            }
+
+            LocalSolutionMetrics baseline_metrics =
+                EvaluateLocalSolutionMetrics(baseline_solution, external_nonpi_leaves);
+
+            vector<SigBit> target_outputs = SortedSigBits(target_output_set);
+            vector<const DualOutputCandidate*> candidate_pool;
+            candidate_pool.reserve(max_local_candidates);
+            for (const DualOutputCandidate *alt : search_candidates) {
+                if (!alt || alt->coverageCount() == 0)
+                    continue;
+                if (CandidateUsesBlockedRoot(*alt, blocked_roots))
+                    continue;
+                bool subset = true;
+                for (SigBit output : alt->covers) {
+                    if (!target_output_set.count(output)) {
+                        subset = false;
+                        break;
+                    }
+                }
+                if (!subset)
+                    continue;
+                candidate_pool.push_back(alt);
+                if (candidate_pool.size() >= max_local_candidates)
+                    break;
+            }
+            if (candidate_pool.empty())
+                continue;
+
+            dict<SigBit, vector<int>> output_to_candidates;
+            for (int idx = 0; idx < int(candidate_pool.size()); idx++) {
+                for (SigBit output : candidate_pool[idx]->covers)
+                    output_to_candidates[output].push_back(idx);
+            }
+            bool all_outputs_reachable = true;
+            for (SigBit output : target_outputs) {
+                if (!output_to_candidates.count(output) || output_to_candidates.at(output).empty()) {
+                    all_outputs_reachable = false;
+                    break;
+                }
+            }
+            if (!all_outputs_reachable)
+                continue;
+
+            vector<const DualOutputCandidate*> partial_solution;
+            pool<SigBit> covered_outputs;
+            pool<Cell*> used_roots;
+            vector<LocalCandidateSolution> best_solutions;
+            SearchLocalCoverSolutions(target_outputs, candidate_pool, output_to_candidates,
+                                      external_nonpi_leaves, baseline_metrics,
+                                      partial_solution, covered_outputs, used_roots,
+                                      best_solutions, max_kept_solutions);
+
+            if (best_solutions.empty())
+                continue;
+
+            int insert_pos = affected_indices.front();
+            for (const auto &solution : best_solutions) {
+                vector<const DualOutputCandidate*> ordered_solution;
+                if (!OrderLocalSolutionTopologically(solution.chosen, ordered_solution))
+                    continue;
+
+                vector<DualOutputCandidate> trial;
+                trial.reserve(selected_candidates.size() - affected_indices.size() + ordered_solution.size());
+                for (int idx = 0; idx < insert_pos; idx++)
+                    trial.push_back(selected_candidates[idx]);
+                for (const DualOutputCandidate *chosen_cand : ordered_solution)
+                    trial.push_back(*chosen_cand);
+                for (int idx = insert_pos; idx < int(selected_candidates.size()); idx++) {
+                    if (!std::binary_search(affected_indices.begin(), affected_indices.end(), idx))
+                        trial.push_back(selected_candidates[idx]);
+                }
+
+                dict<SigBit, int> output_owner;
+                dict<SigBit, pool<int>> leaf_consumers;
+                vector<vector<int>> forward_edges;
+                if (!BuildSelectedCandidateDagState(trial, output_owner, leaf_consumers, forward_edges))
+                    continue;
+
+                selected_candidates.swap(trial);
+                replacements++;
+                changed = true;
+                break;
+            }
+            if (changed)
+                break;
+        }
+
+        if (!changed)
+            break;
+    }
+
+    return replacements;
+}
+
+static void BuildLUT6DInfoFromCandidate(const DualOutputCandidate& cand, LUT6DInfo& lut_info,
+                                        bool log_errors = true)
 {
     Cell* z_node = cand.isZ ? cand.root2 : cand.root1;
     Cell* z5_node = cand.isZ ? cand.root1 : cand.root2;
@@ -1527,9 +2491,13 @@ static void BuildLUT6DInfoFromCandidate(const DualOutputCandidate& cand, LUT6DIn
 
     size_t lut_size = DualLutSizeFromCut(cand.merged_cut, cand.I5);
     if (!BuildDualLutInputs(cand.merged_cut, cand.I5, lut_size, lut_info.inputs)) {
-        log_warning("Layer covering: failed to build dual LUT inputs for %s/%s\n",
-                    cand.root1 ? cand.root1->name.c_str() : "N/A",
-                    cand.root2 ? cand.root2->name.c_str() : "N/A");
+        if (log_errors) {
+            log_warning("Layer covering: failed to build dual LUT inputs for %s/%s\n",
+                        cand.root1 ? cand.root1->name.c_str() : "N/A",
+                        cand.root2 ? cand.root2->name.c_str() : "N/A");
+        }
+        lut_info.inputs.clear();
+        lut_info.INIT = 0;
         return;
     }
 
@@ -1564,10 +2532,10 @@ static void BuildLUT6DInfoFromCandidate(const DualOutputCandidate& cand, LUT6DIn
         State lut_output;
         if (selector_is_one) {
             // 当selector=1时，这个INIT条目影响Z的输出
-            lut_output = StateEval(bit_map, lut_info.Z);
+            lut_output = StateEval(bit_map, lut_info.Z, log_errors);
         } else {
             // 当selector=0时，这个INIT条目影响Z5的输出
-            lut_output = StateEval(bit_map, lut_info.Z5);
+            lut_output = StateEval(bit_map, lut_info.Z5, log_errors);
         }
 
         if (lut_output == State::S1) {
@@ -1589,7 +2557,7 @@ static void LogSigBitSetWarning(const char* label, const pool<SigBit>& bits)
 
 static bool SelectI5AndRoleWithVerify(Cell* node, Cell* cand_node, const Cut& merged_cut,
                                       const pool<SigBit>& potential_I5, SigBit& chosen_i5, bool& isZ,
-                                      Cut& chosen_cut)
+                                      Cut& chosen_cut, bool log_errors = true)
 {
     SigBit node_out = GetCellOutput(node);
     SigBit cand_out = GetCellOutput(cand_node);
@@ -1615,7 +2583,7 @@ static bool SelectI5AndRoleWithVerify(Cell* node, Cell* cand_node, const Cut& me
         if (++tried > MAX_I5_CANDIDATES)
             break;
 
-        if (RoleValid(node, cand_node, bit, merged_cut)) {
+        if (RoleValid(node, cand_node, bit, merged_cut, log_errors)) {
             DualOutputCandidate temp;
             temp.root1 = node;
             temp.root2 = cand_node;
@@ -1623,15 +2591,15 @@ static bool SelectI5AndRoleWithVerify(Cell* node, Cell* cand_node, const Cut& me
             temp.I5 = bit;
             temp.isZ = false;
             LUT6DInfo lut_info;
-            BuildLUT6DInfoFromCandidate(temp, lut_info);
-            if (VerifyLUT6DMapping(lut_info, node, cand_node, false)) {
+            BuildLUT6DInfoFromCandidate(temp, lut_info, log_errors);
+            if (VerifyLUT6DMapping(lut_info, node, cand_node, false, log_errors)) {
                 chosen_i5 = bit;
                 isZ = false;
                 chosen_cut = merged_cut;
                 return true;
             }
         }
-        if (RoleValid(cand_node, node, bit, merged_cut)) {
+        if (RoleValid(cand_node, node, bit, merged_cut, log_errors)) {
             DualOutputCandidate temp;
             temp.root1 = node;
             temp.root2 = cand_node;
@@ -1639,8 +2607,8 @@ static bool SelectI5AndRoleWithVerify(Cell* node, Cell* cand_node, const Cut& me
             temp.I5 = bit;
             temp.isZ = true;
             LUT6DInfo lut_info;
-            BuildLUT6DInfoFromCandidate(temp, lut_info);
-            if (VerifyLUT6DMapping(lut_info, node, cand_node, true)) {
+            BuildLUT6DInfoFromCandidate(temp, lut_info, log_errors);
+            if (VerifyLUT6DMapping(lut_info, node, cand_node, true, log_errors)) {
                 chosen_i5 = bit;
                 isZ = true;
                 chosen_cut = merged_cut;
@@ -1683,6 +2651,30 @@ static size_t CountSharedLeaves(const Cut &a, const Cut &b)
     return shared;
 }
 
+static int ComputeCutPackabilityScore(const Cut &cut)
+{
+    int score = 0;
+    for (auto bit : cut.leaves) {
+        if (!bit.wire)
+            continue;
+        int readers = bit2reader.count(bit) ? int(bit2reader.at(bit).size()) : 0;
+        if (prime_outputs.count(bit))
+            readers++;
+        score += std::min(readers, 8);
+    }
+    return score;
+}
+
+static bool PreferPackableCutHeuristic()
+{
+    return current_mapping_gate_count >= 700 && current_mapping_gate_count <= 12000;
+}
+
+static double PackableCutAreaSlack()
+{
+    return PreferPackableCutHeuristic() ? 0.10 : double(EPSILON);
+}
+
 // 计算候选的综合得分
 static double ComputeCandidateScore(const DualOutputCandidate& cand, const pool<SigBit>& current_layer) {
     (void)current_layer;
@@ -1700,6 +2692,104 @@ static double ComputeCandidateScore(const DualOutputCandidate& cand, const pool<
             dual_bias -= 4.0;
     }
     return coverage_score + input_score + depth_score + shared_score + area_flow_score + area_gain_score + dual_bias;
+}
+
+static bool CompactCutBetter(const Cut &cand, const Cut &best)
+{
+    if (cand.leaves.size() != best.leaves.size())
+        return cand.leaves.size() < best.leaves.size();
+    if (PreferPackableCutHeuristic()) {
+        int cand_pack = ComputeCutPackabilityScore(cand);
+        int best_pack = ComputeCutPackabilityScore(best);
+        if (cand_pack != best_pack)
+            return cand_pack > best_pack;
+    }
+    if (cand.depth != best.depth)
+        return cand.depth < best.depth;
+    if (cand.arrival_time + EPSILON < best.arrival_time)
+        return true;
+    if (best.arrival_time + EPSILON < cand.arrival_time)
+        return false;
+    if (cand.area_flow + EPSILON < best.area_flow)
+        return true;
+    if (best.area_flow + EPSILON < cand.area_flow)
+        return false;
+    return cand.signature < best.signature;
+}
+
+struct PairPrecheckStats {
+    bool feasible;
+    size_t shared;
+    size_t total_inputs;
+    size_t merged_inputs;
+    double area_gain;
+
+    PairPrecheckStats() : feasible(false), shared(0), total_inputs(size_t(LUT_SIZE + 1)),
+                          merged_inputs(size_t(LUT_SIZE + 1)),
+                          area_gain(-std::numeric_limits<double>::infinity()) {}
+};
+
+static bool EstimatePairPrecheckStats(Cell *node, Cell *cand_node,
+                                      const vector<const Cut*> &node_cuts,
+                                      const vector<const Cut*> &cand_cuts,
+                                      PairPrecheckStats &stats)
+{
+    stats = PairPrecheckStats();
+    if (!node || !cand_node)
+        return false;
+
+    SigBit node_output = GetCellOutput(node);
+    SigBit cand_output = GetCellOutput(cand_node);
+
+    for (const Cut *node_cut : node_cuts) {
+        for (const Cut *cand_cut : cand_cuts) {
+            if (!node_cut || !cand_cut)
+                continue;
+            if (!Cut::canMergeFast(*node_cut, *cand_cut, LUT_SIZE))
+                continue;
+
+            size_t shared = CountSharedLeaves(*node_cut, *cand_cut);
+            if ((int)shared < MIN_SHARED_INPUTS_FOR_DUAL)
+                continue;
+
+            size_t total_inputs = node_cut->leaves.size() + cand_cut->leaves.size() - shared;
+            if (total_inputs > size_t(LUT_SIZE))
+                continue;
+
+            Cut merged = MergeCuts(*node_cut, *cand_cut);
+            if (merged.leaves.size() > size_t(LUT_SIZE))
+                continue;
+            if (merged.leaves.count(node_output) || merged.leaves.count(cand_output))
+                continue;
+
+            double area_gain = node_cut->area_flow + cand_cut->area_flow - merged.area_flow;
+            bool better = false;
+            if (!stats.feasible)
+                better = true;
+            else if (total_inputs < stats.total_inputs)
+                better = true;
+            else if (total_inputs == stats.total_inputs && shared > stats.shared)
+                better = true;
+            else if (total_inputs == stats.total_inputs && shared == stats.shared &&
+                     area_gain > stats.area_gain + EPSILON)
+                better = true;
+            else if (total_inputs == stats.total_inputs && shared == stats.shared &&
+                     fabs(area_gain - stats.area_gain) <= EPSILON &&
+                     merged.leaves.size() < stats.merged_inputs)
+                better = true;
+
+            if (!better)
+                continue;
+
+            stats.feasible = true;
+            stats.shared = shared;
+            stats.total_inputs = total_inputs;
+            stats.merged_inputs = merged.leaves.size();
+            stats.area_gain = area_gain;
+        }
+    }
+
+    return stats.feasible;
 }
 
 static void CollectLayerCandidateCuts(Cell* node, vector<const Cut*>& cuts)
@@ -1744,14 +2834,10 @@ static void CollectLayerCandidateCuts(Cell* node, vector<const Cut*>& cuts)
 
     sort(filtered.begin(), filtered.end(),
          [](const Cut* a, const Cut* b) {
-             if (a->leaves.size() != b->leaves.size())
-                 return a->leaves.size() < b->leaves.size();
-             if (a->depth != b->depth)
-                 return a->depth < b->depth;
-             if (fabs(a->area_flow - b->area_flow) > EPSILON)
-                 return a->area_flow < b->area_flow;
-             if (fabs(a->arrival_time - b->arrival_time) > EPSILON)
-                 return a->arrival_time < b->arrival_time;
+             if (CompactCutBetter(*a, *b))
+                 return true;
+             if (CompactCutBetter(*b, *a))
+                 return false;
              return a->signature < b->signature;
          });
 
@@ -1826,6 +2912,13 @@ static void GenerateDualCandidatesForNode(Cell* node, const pool<SigBit>& curren
         if (seed_limit_hit) break;
     }
 
+    // 运行时扩张：按论文中的 fanin/fanout BFS 在根节点周围继续搜寻可配对节点。
+    if (!seed_limit_hit) {
+        CollectRuntimeExpansionPairSeeds(node, pair_seed_limit, potential_pairs);
+        if (potential_pairs.size() >= pair_seed_limit)
+            seed_limit_hit = true;
+    }
+
     // 也考虑输出在当前层的其他节点（已达到预筛上限时跳过）
     if (!seed_limit_hit) {
         for (SigBit sig : current_layer) {
@@ -1851,31 +2944,62 @@ static void GenerateDualCandidatesForNode(Cell* node, const pool<SigBit>& curren
         size_t shared;
         size_t total_inputs;
         int level_gap;
+        bool uses_alt_cuts;
     };
     vector<PairRank> shared_ranked_pairs;
     vector<PairRank> disjoint_ranked_pairs;
     shared_ranked_pairs.reserve(ordered_pairs.size());
     disjoint_ranked_pairs.reserve(ordered_pairs.size());
     for (Cell* cand_node : ordered_pairs) {
-        const Cut* cand_best = GetBestCutForCover(cand_node);
-        if (!cand_best)
+        vector<const Cut*> cand_cuts;
+        CollectLayerCandidateCuts(cand_node, cand_cuts);
+        if (cand_cuts.empty())
             continue;
-        size_t shared = CountSharedLeaves(*best_cut, *cand_best);
-        if (shared < size_t(MIN_SHARED_INPUTS_FOR_DUAL))
-            continue;
-        size_t total_inputs = best_cut->leaves.size() + cand_best->leaves.size() - shared;
-        if (total_inputs > size_t(LUT_SIZE))
-            continue;
+
+        bool large_graph_pair_rank = current_mapping_gate_count >= 5000;
+        size_t shared = 0;
+        size_t total_inputs = 0;
+        double rank_area_gain = 0.0;
+        bool uses_alt_cuts = false;
+
+        if (large_graph_pair_rank) {
+            PairPrecheckStats precheck;
+            vector<const Cut*> best_only_node{best_cut};
+            vector<const Cut*> best_only_cand{cand_cuts[0]};
+            if (!EstimatePairPrecheckStats(node, cand_node, best_only_node, best_only_cand, precheck)) {
+                if (!EstimatePairPrecheckStats(node, cand_node, node_cuts, cand_cuts, precheck))
+                    continue;
+                uses_alt_cuts = true;
+            }
+
+            shared = precheck.shared;
+            total_inputs = precheck.total_inputs;
+            rank_area_gain = precheck.area_gain;
+        } else {
+            const Cut* cand_best = GetBestCutForCover(cand_node);
+            if (!cand_best)
+                continue;
+            shared = CountSharedLeaves(*best_cut, *cand_best);
+            if (shared < size_t(MIN_SHARED_INPUTS_FOR_DUAL))
+                continue;
+            total_inputs = best_cut->leaves.size() + cand_best->leaves.size() - shared;
+            if (total_inputs > size_t(LUT_SIZE))
+                continue;
+        }
         int level_gap = 0;
         if (cell2level.count(node) && cell2level.count(cand_node))
             level_gap = std::abs((int)cell2level[node] - (int)cell2level[cand_node]);
         int rank = int(shared) * 100 - int(total_inputs) * 10 - level_gap * 4;
+        if (large_graph_pair_rank)
+            rank += int(std::round(rank_area_gain * 8.0));
         SigBit cand_out = GetCellOutput(cand_node);
         if (current_layer.count(cand_out))
             rank += 10;
         if (shared == 0)
             rank += (total_inputs <= size_t(LUT_SIZE - 1)) ? 5 : 0;
-        PairRank item{cand_node, rank, shared, total_inputs, level_gap};
+        if (uses_alt_cuts)
+            rank -= 12;
+        PairRank item{cand_node, rank, shared, total_inputs, level_gap, uses_alt_cuts};
         if (shared == 0)
             disjoint_ranked_pairs.push_back(item);
         else
@@ -1891,6 +3015,8 @@ static void GenerateDualCandidatesForNode(Cell* node, const pool<SigBit>& curren
             return a.total_inputs < b.total_inputs;
         if (a.level_gap != b.level_gap)
             return a.level_gap < b.level_gap;
+        if (a.uses_alt_cuts != b.uses_alt_cuts)
+            return a.uses_alt_cuts < b.uses_alt_cuts;
         return LessCellStable(a.cand, b.cand);
     };
 
@@ -1931,6 +3057,8 @@ static void GenerateDualCandidatesForNode(Cell* node, const pool<SigBit>& curren
                  return a.total_inputs < b.total_inputs;
              if (a.level_gap != b.level_gap)
                  return a.level_gap < b.level_gap;
+             if (a.uses_alt_cuts != b.uses_alt_cuts)
+                 return a.uses_alt_cuts < b.uses_alt_cuts;
              return LessCellStable(a.cand, b.cand);
          });
 
@@ -2114,7 +3242,7 @@ static void LayerCoveringGreedy(const pool<SigBit>& current_layer,
     
     log("    Generated %zu candidates: %zu dual, %zu single\n", 
         all_candidates.size(), dual_cand_count, single_cand_count);
-    
+
     // 按综合得分排序（得分中已包含覆盖项）
     sort(all_candidates.begin(), all_candidates.end(),
          [](const DualOutputCandidate& a, const DualOutputCandidate& b) {
@@ -2141,15 +3269,22 @@ static void LayerCoveringGreedy(const pool<SigBit>& current_layer,
                  return LessSigBitStable(a.I5, b.I5);
              return a.merged_cut.signature < b.merged_cut.signature;
          });
+
     
     // 贪心选择
     pool<Cell*> used_nodes;
+    dict<SigBit, int> selected_output_owner;
+    dict<SigBit, pool<int>> selected_leaf_consumers;
+    vector<vector<int>> selected_forward_edges;
     for (const auto& cand : all_candidates) {
         if (uncovered.empty()) break;
         
         // 检查候选是否与已选冲突
         if (used_nodes.count(cand.root1)) continue;
         if (cand.root2 && used_nodes.count(cand.root2)) continue;
+        if (!CandidateKeepsSelectedDag(cand, selected_output_owner,
+                                       selected_leaf_consumers, selected_forward_edges))
+            continue;
         
         // 检查候选是否能覆盖任何未覆盖的信号
         bool covers_something = false;
@@ -2162,7 +3297,24 @@ static void LayerCoveringGreedy(const pool<SigBit>& current_layer,
         if (!covers_something) continue;
         
         // 选择这个候选
+        pool<int> providers, consumers;
+        GatherSelectedCandidateDeps(cand, selected_output_owner, selected_leaf_consumers,
+                                    providers, consumers);
+        int selected_idx = int(selected_candidates.size());
         selected_candidates.push_back(cand);
+        selected_forward_edges.emplace_back();
+        for (int provider : providers)
+            selected_forward_edges[provider].push_back(selected_idx);
+        for (int consumer : consumers)
+            selected_forward_edges[selected_idx].push_back(consumer);
+
+        vector<SigBit> outputs;
+        GetCandidateOutputs(cand, outputs);
+        for (SigBit output : outputs)
+            selected_output_owner[output] = selected_idx;
+        for (SigBit leaf : cand.merged_cut.leaves)
+            selected_leaf_consumers[leaf].insert(selected_idx);
+
         used_nodes.insert(cand.root1);
         if (cand.root2) used_nodes.insert(cand.root2);
         
@@ -2207,6 +3359,12 @@ static void LayerCoveringGreedy(const pool<SigBit>& current_layer,
             }
         }
     }
+
+    size_t local_replacements = ImproveLayerSelectionLocally(all_candidates, selected_candidates);
+    if (local_replacements > 0)
+        log("    Layer local improvement: applied %zu neighborhood replacements\n",
+            local_replacements);
+    RebuildNextLayerSignalsFromSelected(selected_candidates, next_layer_signals);
 }
 
 static bool BuildSingleLUTFromCut(Cell* root, const Cut& cut, SingleLUTInfo& single_lut)
@@ -2243,6 +3401,215 @@ static bool BuildSingleLUTFromCut(Cell* root, const Cut& cut, SingleLUTInfo& sin
     single_lut.INIT = init;
     single_lut.removedNodes.insert(root->name);
     return true;
+}
+
+static bool ExpandDualLUTToSingles(Module *module, const LUT6DInfo &lut_info,
+                                   vector<SingleLUTInfo> &replacements)
+{
+    replacements.clear();
+
+    vector<IdString> ordered_roots;
+    for (const auto &cell_name : lut_info.removedNodes)
+        ordered_roots.push_back(cell_name);
+    sort(ordered_roots.begin(), ordered_roots.end());
+
+    for (const auto &cell_name : ordered_roots) {
+        if (!module->cells_.count(cell_name))
+            continue;
+        Cell *root = module->cells_.at(cell_name);
+        const Cut *best_cut = GetBestCutForCover(root);
+        if (!best_cut)
+            return false;
+
+        SingleLUTInfo single_lut;
+        if (!BuildSingleLUTFromCut(root, *best_cut, single_lut))
+            return false;
+        replacements.push_back(single_lut);
+    }
+
+    return !replacements.empty();
+}
+
+static int DualLUTLevelSpan(Module *module, const LUT6DInfo &lut_info)
+{
+    int min_level = std::numeric_limits<int>::max();
+    int max_level = std::numeric_limits<int>::min();
+
+    for (const auto &cell_name : lut_info.removedNodes) {
+        if (!module->cells_.count(cell_name))
+            continue;
+        Cell *root = module->cells_.at(cell_name);
+        if (!root || !cell2level.count(root))
+            continue;
+        int level = int(cell2level[root]);
+        min_level = std::min(min_level, level);
+        max_level = std::max(max_level, level);
+    }
+
+    if (min_level == std::numeric_limits<int>::max())
+        return 0;
+    return max_level - min_level;
+}
+
+static size_t RepairPlannedLUTCycles(Module *module,
+                                     vector<LUT6DInfo> &dual_luts,
+                                     vector<SingleLUTInfo> &single_luts,
+                                     pool<uint64_t> *forbidden_pair_keys = nullptr)
+{
+    struct PlannedRef {
+        bool is_dual;
+        int idx;
+    };
+
+    size_t split_duals = 0;
+    while (true) {
+        vector<PlannedRef> planned;
+        planned.reserve(dual_luts.size() + single_luts.size());
+        for (int i = 0; i < int(dual_luts.size()); i++)
+            planned.push_back({true, i});
+        for (int i = 0; i < int(single_luts.size()); i++)
+            planned.push_back({false, i});
+
+        if (planned.empty())
+            break;
+
+        dict<SigBit, int> output_owner;
+        vector<vector<int>> forward_edges(planned.size());
+        vector<int> indegree(planned.size(), 0);
+
+        for (int plan_idx = 0; plan_idx < int(planned.size()); plan_idx++) {
+            const PlannedRef &ref = planned[plan_idx];
+            if (ref.is_dual) {
+                if (dual_luts[ref.idx].Z.wire)
+                    output_owner[dual_luts[ref.idx].Z] = plan_idx;
+                if (dual_luts[ref.idx].Z5.wire)
+                    output_owner[dual_luts[ref.idx].Z5] = plan_idx;
+            } else {
+                if (single_luts[ref.idx].output.wire)
+                    output_owner[single_luts[ref.idx].output] = plan_idx;
+            }
+        }
+
+        for (int plan_idx = 0; plan_idx < int(planned.size()); plan_idx++) {
+            const PlannedRef &ref = planned[plan_idx];
+            const vector<SigBit> &inputs = ref.is_dual
+                ? dual_luts[ref.idx].inputs
+                : single_luts[ref.idx].inputs;
+            pool<int> seen_deps;
+            for (auto input : inputs) {
+                if (!input.wire || !output_owner.count(input))
+                    continue;
+                int dep = output_owner.at(input);
+                if (dep == plan_idx)
+                    continue;
+                if (seen_deps.insert(dep).second) {
+                    forward_edges[dep].push_back(plan_idx);
+                    indegree[plan_idx]++;
+                }
+            }
+        }
+
+        queue<int> ready;
+        pool<int> visited;
+        for (int i = 0; i < int(planned.size()); i++) {
+            if (indegree[i] == 0) {
+                ready.push(i);
+                visited.insert(i);
+            }
+        }
+
+        size_t topo_count = 0;
+        while (!ready.empty()) {
+            int node_idx = ready.front();
+            ready.pop();
+            topo_count++;
+            for (int next : forward_edges[node_idx]) {
+                if (--indegree[next] == 0 && visited.insert(next).second)
+                    ready.push(next);
+            }
+        }
+
+        if (topo_count == planned.size())
+            break;
+
+        int chosen_plan_idx = -1;
+        int best_level_span = -1;
+        size_t best_input_count = 0;
+        for (int i = 0; i < int(planned.size()); i++) {
+            if (visited.count(i))
+                continue;
+            if (!planned[i].is_dual)
+                continue;
+            const LUT6DInfo &lut_info = dual_luts[planned[i].idx];
+            int level_span = DualLUTLevelSpan(module, lut_info);
+            size_t input_count = lut_info.inputs.size();
+            if (chosen_plan_idx < 0 || level_span > best_level_span ||
+                (level_span == best_level_span && input_count > best_input_count)) {
+                chosen_plan_idx = i;
+                best_level_span = level_span;
+                best_input_count = input_count;
+            }
+        }
+
+        if (chosen_plan_idx < 0)
+            break;
+
+        vector<SingleLUTInfo> replacements;
+        if (!ExpandDualLUTToSingles(module, dual_luts[planned[chosen_plan_idx].idx], replacements))
+            break;
+
+        if (forbidden_pair_keys) {
+            const LUT6DInfo &split_lut = dual_luts[planned[chosen_plan_idx].idx];
+            if (split_lut.Z.wire && split_lut.Z5.wire)
+                forbidden_pair_keys->insert(MakeSigBitPairKey(split_lut.Z, split_lut.Z5));
+        }
+
+        dual_luts.erase(dual_luts.begin() + planned[chosen_plan_idx].idx);
+        for (auto &single_lut : replacements)
+            single_luts.push_back(single_lut);
+        split_duals++;
+    }
+
+    return split_duals;
+}
+
+static size_t RepairAndRepackPlannedLUTs(Module *module,
+                                         vector<LUT6DInfo> &dual_luts,
+                                         vector<SingleLUTInfo> &single_luts,
+                                         const char *mode_name)
+{
+    size_t total_repaired = 0;
+    int repack_rounds = 0;
+    if (!disable_postpack) {
+        if (current_mapping_gate_count <= 12000)
+            repack_rounds = 4;
+        else if (current_mapping_gate_count >= 30000 && current_mapping_gate_count <= 50000)
+            repack_rounds = 1;
+    }
+    postpack_forbidden_pair_keys.clear();
+
+    while (true) {
+        size_t repaired = RepairPlannedLUTCycles(module, dual_luts, single_luts,
+                                                 repack_rounds > 0 ? &postpack_forbidden_pair_keys : nullptr);
+        if (repaired == 0)
+            break;
+
+        total_repaired += repaired;
+        log("  Repaired %zu cyclic dual LUTs in %s mode\n", repaired, mode_name);
+
+        if (repack_rounds <= 0 || single_luts.size() < 2)
+            break;
+
+        size_t before_total = dual_luts.size() + single_luts.size();
+        PostPackSingleLUTs(dual_luts, single_luts);
+        size_t after_total = dual_luts.size() + single_luts.size();
+        repack_rounds--;
+        if (after_total >= before_total)
+            break;
+    }
+
+    postpack_forbidden_pair_keys.clear();
+    return total_repaired;
 }
 
 // 将层级覆盖候选转换为LUT6DInfo或SingleLUTInfo
@@ -2497,12 +3864,64 @@ static void BuildBestCutSingleCover(const vector<Cell *> &gates,
     }
 }
 
+static size_t ShrinkSingleLUTsForPostPack(vector<SingleLUTInfo> &single_luts)
+{
+    size_t rebuilt = 0;
+
+    for (auto &single_lut : single_luts) {
+        Cell *root = bit2driver.count(single_lut.output) ? bit2driver[single_lut.output] : nullptr;
+        if (!root || !IsCombinationalGate(root))
+            continue;
+
+        const Cut *base_cut = GetBestCutForCover(root);
+        if (!base_cut || !cell2cuts.count(root))
+            continue;
+
+        const Cut *chosen_cut = base_cut;
+        float allowed_arrival = base_cut->arrival_time;
+        if (cell2required.count(root))
+            allowed_arrival = std::max(allowed_arrival, cell2required[root]);
+        for (const auto &cand : cell2cuts[root]) {
+            if (cand.leaves.size() > size_t(LUT_SIZE))
+                continue;
+            if (cand.arrival_time > allowed_arrival + EPSILON)
+                continue;
+            if (!CompactCutBetter(cand, *chosen_cut))
+                continue;
+            chosen_cut = &cand;
+        }
+
+        if (chosen_cut == base_cut)
+            continue;
+
+        SingleLUTInfo rebuilt_lut;
+        if (!BuildSingleLUTFromCut(root, *chosen_cut, rebuilt_lut))
+            continue;
+        single_lut = std::move(rebuilt_lut);
+        rebuilt++;
+    }
+
+    return rebuilt;
+}
+
 struct PostPackEntry {
     size_t idx;
     size_t real_inputs;
     pool<SigBit> leaves;
     uint64_t signature;
+    Cell *cell;
+    size_t level;
 };
+
+struct PostPackCandidateEdge {
+    size_t pos_a;
+    size_t pos_b;
+    size_t level_gap;
+    size_t merged_size;
+    size_t shared_inputs;
+};
+
+static Cell *GetPostPackCell(const SingleLUTInfo &single_lut);
 
 static void BuildPostPackEntries(const vector<SingleLUTInfo> &single_luts,
                                  vector<PostPackEntry> &entries)
@@ -2514,6 +3933,8 @@ static void BuildPostPackEntries(const vector<SingleLUTInfo> &single_luts,
         entry.idx = i;
         entry.real_inputs = 0;
         entry.signature = 0;
+        entry.cell = GetPostPackCell(single_luts[i]);
+        entry.level = entry.cell && cell2level.count(entry.cell) ? cell2level.at(entry.cell) : 0;
         for (auto inp : single_luts[i].inputs) {
             if (inp.wire == nullptr)
                 continue;
@@ -2531,6 +3952,369 @@ static void BuildPostPackEntries(const vector<SingleLUTInfo> &single_luts,
                  return a.real_inputs < b.real_inputs;
              return a.idx < b.idx;
          });
+}
+
+static void CollectPostPackCandidateCuts(Cell *cell, size_t cut_limit,
+                                         vector<const Cut*> &cuts)
+{
+    cuts.clear();
+    if (!cell || !cell2cuts.count(cell))
+        return;
+
+    for (auto &cand : cell2cuts[cell]) {
+        if (cand.leaves.size() <= size_t(LUT_SIZE))
+            cuts.push_back(&cand);
+    }
+
+    sort(cuts.begin(), cuts.end(),
+         [](const Cut *a, const Cut *b) {
+             return CompactCutBetter(*a, *b);
+         });
+
+    if (cuts.size() > cut_limit)
+        cuts.resize(cut_limit);
+}
+
+static Cell *GetPostPackCell(const SingleLUTInfo &single_lut)
+{
+    return bit2driver.count(single_lut.output) ? bit2driver[single_lut.output] : nullptr;
+}
+
+static bool GetCachedPostPackCandidateCuts(Cell *cell, size_t cut_limit,
+                                           dict<Cell*, vector<const Cut*>> &cut_cache,
+                                           vector<const Cut*> &cuts)
+{
+    cuts.clear();
+    if (!cell)
+        return false;
+    if (!cut_cache.count(cell)) {
+        vector<const Cut*> cached;
+        CollectPostPackCandidateCuts(cell, cut_limit, cached);
+        cut_cache[cell] = cached;
+    }
+    cuts = cut_cache.at(cell);
+    return !cuts.empty();
+}
+
+static void PreparePostPackCandidateCuts(const vector<PostPackEntry> &entries, size_t cut_limit,
+                                         vector<vector<const Cut*>> &entry_cuts)
+{
+    entry_cuts.clear();
+    entry_cuts.resize(entries.size());
+    dict<Cell*, vector<const Cut*>> cut_cache;
+    for (size_t i = 0; i < entries.size(); i++) {
+        if (!entries[i].cell)
+            continue;
+        GetCachedPostPackCandidateCuts(entries[i].cell, cut_limit, cut_cache, entry_cuts[i]);
+    }
+}
+
+static bool BuildPostPackPairFromEntries(const vector<SingleLUTInfo> &single_luts,
+                                         const PostPackEntry &entry_a,
+                                         const PostPackEntry &entry_b,
+                                         LUT6DInfo &lut_info,
+                                         size_t &level_gap,
+                                         size_t &merged_size,
+                                         size_t &shared_inputs,
+                                         bool log_errors = true)
+{
+    uint64_t combined_sig = entry_a.signature | entry_b.signature;
+    if (__builtin_popcountll(combined_sig) > LUT_SIZE)
+        return false;
+
+    pool<SigBit> merged_leaves = entry_a.leaves;
+    for (auto &leaf : entry_b.leaves)
+        merged_leaves.insert(leaf);
+    merged_size = merged_leaves.size();
+    shared_inputs = entry_a.real_inputs + entry_b.real_inputs - merged_size;
+    if (merged_size > size_t(LUT_SIZE))
+        return false;
+
+    const SingleLUTInfo &lut_a = single_luts[entry_a.idx];
+    const SingleLUTInfo &lut_b = single_luts[entry_b.idx];
+    SigBit out_a = lut_a.output;
+    SigBit out_b = lut_b.output;
+    if (postpack_forbidden_pair_keys.count(MakeSigBitPairKey(out_a, out_b)))
+        return false;
+
+    if (entry_a.leaves.count(out_b) || entry_b.leaves.count(out_a))
+        return false;
+
+    Cell *cell_a = entry_a.cell;
+    Cell *cell_b = entry_b.cell;
+    if (!cell_a || !cell_b)
+        return false;
+    level_gap = entry_a.level >= entry_b.level ? entry_a.level - entry_b.level : entry_b.level - entry_a.level;
+
+    pool<SigBit> potential_I5;
+    if (merged_size + 1 <= size_t(LUT_SIZE))
+        potential_I5.insert(State::S1);
+    for (auto &leaf : entry_a.leaves) {
+        potential_I5.insert(leaf);
+    }
+    for (auto &leaf : entry_b.leaves) {
+        potential_I5.insert(leaf);
+    }
+    if (potential_I5.empty())
+        return false;
+
+    Cut fake_cut;
+    fake_cut.leaves = merged_leaves;
+    SigBit chosen_i5;
+    bool isZ;
+    Cut chosen_cut;
+    if (!SelectI5AndRoleWithVerify(cell_a, cell_b, fake_cut, potential_I5,
+                                   chosen_i5, isZ, chosen_cut, log_errors))
+        return false;
+
+    DualOutputCandidate temp;
+    temp.root1 = cell_a;
+    temp.root2 = cell_b;
+    temp.merged_cut = chosen_cut;
+    temp.I5 = chosen_i5;
+    temp.isZ = isZ;
+    BuildLUT6DInfoFromCandidate(temp, lut_info, log_errors);
+    return VerifyLUT6DMapping(lut_info, cell_a, cell_b, isZ, log_errors);
+}
+
+static bool BuildPostPackPairWithPreparedCuts(const vector<SingleLUTInfo> &single_luts,
+                                              const PostPackEntry &entry_a,
+                                              const PostPackEntry &entry_b,
+                                              const vector<const Cut*> &cuts_a,
+                                              const vector<const Cut*> &cuts_b,
+                                              LUT6DInfo &lut_info,
+                                              size_t &level_gap,
+                                              size_t &merged_size,
+                                              size_t &shared_inputs,
+                                              bool log_errors = true)
+{
+    const SingleLUTInfo &lut_a = single_luts[entry_a.idx];
+    const SingleLUTInfo &lut_b = single_luts[entry_b.idx];
+    Cell *cell_a = entry_a.cell;
+    Cell *cell_b = entry_b.cell;
+    if (!cell_a || !cell_b || cuts_a.empty() || cuts_b.empty())
+        return false;
+
+    level_gap = entry_a.level >= entry_b.level ? entry_a.level - entry_b.level : entry_b.level - entry_a.level;
+
+    SigBit out_a = lut_a.output;
+    SigBit out_b = lut_b.output;
+    if (postpack_forbidden_pair_keys.count(MakeSigBitPairKey(out_a, out_b)))
+        return false;
+
+    bool found = false;
+    size_t best_merged_size = std::numeric_limits<size_t>::max();
+    size_t best_shared_inputs = 0;
+    size_t best_total_inputs = std::numeric_limits<size_t>::max();
+    LUT6DInfo best_lut_info;
+
+    for (auto *ca : cuts_a) {
+        for (auto *cb : cuts_b) {
+            if (!ca || !cb)
+                continue;
+            if (ca->leaves.count(out_b) || cb->leaves.count(out_a))
+                continue;
+            if (!Cut::canMergeFast(*ca, *cb, LUT_SIZE))
+                continue;
+
+            pool<SigBit> merged_leaves = ca->leaves;
+            for (auto &leaf : cb->leaves)
+                merged_leaves.insert(leaf);
+            size_t curr_merged_size = merged_leaves.size();
+            if (curr_merged_size > size_t(LUT_SIZE))
+                continue;
+
+            size_t curr_shared_inputs = ca->leaves.size() + cb->leaves.size() - curr_merged_size;
+            size_t curr_total_inputs = ca->leaves.size() + cb->leaves.size();
+            if (found && curr_merged_size > best_merged_size)
+                continue;
+            if (found && curr_merged_size == best_merged_size && curr_shared_inputs < best_shared_inputs)
+                continue;
+            if (found && curr_merged_size == best_merged_size &&
+                curr_shared_inputs == best_shared_inputs &&
+                curr_total_inputs >= best_total_inputs)
+                continue;
+
+            pool<SigBit> potential_I5;
+            if (curr_merged_size + 1 <= size_t(LUT_SIZE))
+                potential_I5.insert(State::S1);
+            for (auto &leaf : ca->leaves)
+                potential_I5.insert(leaf);
+            for (auto &leaf : cb->leaves)
+                potential_I5.insert(leaf);
+            if (potential_I5.empty())
+                continue;
+
+            Cut fake_cut;
+            fake_cut.leaves = merged_leaves;
+            SigBit chosen_i5;
+            bool isZ;
+            Cut chosen_cut;
+            if (!SelectI5AndRoleWithVerify(cell_a, cell_b, fake_cut, potential_I5,
+                                           chosen_i5, isZ, chosen_cut, log_errors))
+                continue;
+
+            DualOutputCandidate temp;
+            temp.root1 = cell_a;
+            temp.root2 = cell_b;
+            temp.merged_cut = chosen_cut;
+            temp.I5 = chosen_i5;
+            temp.isZ = isZ;
+            LUT6DInfo candidate_lut_info;
+            BuildLUT6DInfoFromCandidate(temp, candidate_lut_info, log_errors);
+            if (!VerifyLUT6DMapping(candidate_lut_info, cell_a, cell_b, isZ, log_errors))
+                continue;
+
+            best_lut_info = candidate_lut_info;
+            best_merged_size = curr_merged_size;
+            best_shared_inputs = curr_shared_inputs;
+            best_total_inputs = curr_total_inputs;
+            found = true;
+        }
+    }
+
+    if (!found)
+        return false;
+
+    lut_info = best_lut_info;
+    merged_size = best_merged_size;
+    shared_inputs = best_shared_inputs;
+    return true;
+}
+
+static void CollectPostPackCandidateEdges(const vector<SingleLUTInfo> &single_luts,
+                                          const vector<PostPackEntry> &entries,
+                                          size_t begin_pos,
+                                          size_t end_pos,
+                                          size_t scan_window,
+                                          const vector<vector<const Cut*>> *prepared_cuts,
+                                          vector<PostPackCandidateEdge> &edges,
+                                          vector<size_t> &degrees,
+                                          int &worker_threads_used)
+{
+    edges.clear();
+    worker_threads_used = 0;
+    if (end_pos <= begin_pos) {
+        degrees.clear();
+        return;
+    }
+
+    size_t range_size = end_pos - begin_pos;
+    degrees.assign(range_size, 0);
+    if (range_size < 2)
+        return;
+
+    auto evaluate_pair = [&](size_t i, size_t j, PostPackCandidateEdge &edge) {
+        LUT6DInfo lut_info;
+        size_t level_gap = 0;
+        size_t merged_size = 0;
+        size_t shared_inputs = 0;
+        bool ok = false;
+        if (prepared_cuts) {
+            const auto &cuts_a = (*prepared_cuts)[i];
+            const auto &cuts_b = (*prepared_cuts)[j];
+            if (!cuts_a.empty() && !cuts_b.empty()) {
+                ok = BuildPostPackPairWithPreparedCuts(single_luts, entries[i], entries[j],
+                                                       cuts_a, cuts_b, lut_info,
+                                                       level_gap, merged_size,
+                                                       shared_inputs, false);
+            }
+        } else {
+            ok = BuildPostPackPairFromEntries(single_luts, entries[i], entries[j],
+                                              lut_info, level_gap, merged_size,
+                                              shared_inputs, false);
+        }
+        if (!ok)
+            return false;
+        edge = {i, j, level_gap, merged_size, shared_inputs};
+        return true;
+    };
+
+    int max_workers = int(std::min<size_t>(range_size > 0 ? range_size - 1 : 0, 32));
+    int pool_size = range_size >= 96 ? ThreadPool::pool_size(1, max_workers) : 0;
+    if (pool_size <= 0) {
+        for (size_t i = begin_pos; i < end_pos; i++) {
+            size_t j_end = end_pos;
+            if (scan_window > 0)
+                j_end = std::min(end_pos, i + 1 + scan_window);
+            for (size_t j = i + 1; j < j_end; j++) {
+                PostPackCandidateEdge edge;
+                if (!evaluate_pair(i, j, edge))
+                    continue;
+                edges.push_back(edge);
+                degrees[i - begin_pos]++;
+                degrees[j - begin_pos]++;
+            }
+        }
+        return;
+    }
+
+    worker_threads_used = pool_size;
+    size_t slot_count = size_t(pool_size) + 1;
+    vector<vector<PostPackCandidateEdge>> edge_buckets(slot_count);
+    vector<vector<size_t>> degree_buckets(slot_count, vector<size_t>(range_size, 0));
+    std::atomic<size_t> next_i(begin_pos);
+
+    auto process_slot = [&](size_t slot) {
+        while (true) {
+            size_t i = next_i.fetch_add(1);
+            if (i >= end_pos)
+                break;
+            size_t j_end = end_pos;
+            if (scan_window > 0)
+                j_end = std::min(end_pos, i + 1 + scan_window);
+            for (size_t j = i + 1; j < j_end; j++) {
+                PostPackCandidateEdge edge;
+                if (!evaluate_pair(i, j, edge))
+                    continue;
+                edge_buckets[slot].push_back(edge);
+                degree_buckets[slot][i - begin_pos]++;
+                degree_buckets[slot][j - begin_pos]++;
+            }
+        }
+    };
+
+    {
+        Multithreading multithreading_guard;
+        ThreadPool pool(pool_size, [&](int thread_id) {
+            process_slot(size_t(thread_id) + 1);
+        });
+        process_slot(0);
+    }
+
+    size_t total_edges = 0;
+    for (const auto &bucket : edge_buckets)
+        total_edges += bucket.size();
+    edges.reserve(total_edges);
+    for (size_t slot = 0; slot < slot_count; slot++) {
+        edges.insert(edges.end(), edge_buckets[slot].begin(), edge_buckets[slot].end());
+        for (size_t idx = 0; idx < range_size; idx++)
+            degrees[idx] += degree_buckets[slot][idx];
+    }
+}
+
+static bool ApproxPostPackPairPossible(const vector<SingleLUTInfo> &single_luts,
+                                       const PostPackEntry &entry_a,
+                                       const PostPackEntry &entry_b)
+{
+    uint64_t combined_sig = entry_a.signature | entry_b.signature;
+    if (__builtin_popcountll(combined_sig) > LUT_SIZE)
+        return false;
+
+    pool<SigBit> merged_leaves = entry_a.leaves;
+    for (auto &leaf : entry_b.leaves)
+        merged_leaves.insert(leaf);
+    if (merged_leaves.size() > size_t(LUT_SIZE))
+        return false;
+
+    const SingleLUTInfo &lut_a = single_luts[entry_a.idx];
+    const SingleLUTInfo &lut_b = single_luts[entry_b.idx];
+    if (postpack_forbidden_pair_keys.count(MakeSigBitPairKey(lut_a.output, lut_b.output)))
+        return false;
+    if (entry_a.leaves.count(lut_b.output) || entry_b.leaves.count(lut_a.output))
+        return false;
+
+    return true;
 }
 
 static void CountModuleMappingCells(Module *module, size_t &aig_cells,
@@ -2583,116 +4367,209 @@ static void PostPackSingleLUTs(vector<LUT6DInfo> &dual_luts,
 {
     if (single_luts.size() < 2) return;
 
+    PerformanceTimer postpack_total_timer;
+    postpack_total_timer.begin();
+    PerformanceTimer prep_timer;
+    prep_timer.begin();
+
+    size_t rebuilt = ShrinkSingleLUTsForPostPack(single_luts);
+    if (rebuilt > 0)
+        log("  Post-packing prep: rebuilt %zu single LUTs with smaller equivalent cuts\n", rebuilt);
+
     vector<PostPackEntry> entries;
     BuildPostPackEntries(single_luts, entries);
+    EndPhaseTimer(prep_timer, "post-pack prep");
 
     pool<size_t> consumed;
     size_t packed = 0;
+    auto commit_pair = [&](size_t a_idx, size_t b_idx, LUT6DInfo &lut_info) {
+        SingleLUTInfo &lutA = single_luts[a_idx];
+        SingleLUTInfo &lutB = single_luts[b_idx];
+        lut_info.removedNodes.insert(lutA.removedNodes.begin(), lutA.removedNodes.end());
+        lut_info.removedNodes.insert(lutB.removedNodes.begin(), lutB.removedNodes.end());
+        dual_luts.push_back(lut_info);
+        consumed.insert(a_idx);
+        consumed.insert(b_idx);
+        packed++;
+    };
 
-    for (size_t i = 0; i < entries.size(); i++) {
-        if (consumed.count(entries[i].idx)) continue;
-        size_t a_idx = entries[i].idx;
-        size_t a_real = entries[i].real_inputs;
-        if (a_real > 5) continue;
+    const size_t pass1_global_match_limit = 3072;
+    bool pass1_alt_pair_search = false;
+    if (current_mapping_gate_count <= 1500 && entries.size() <= 1024)
+        pass1_alt_pair_search = true;
+    if (current_mapping_gate_count >= 3000 && current_mapping_gate_count <= 5000 &&
+        entries.size() <= 2048)
+        pass1_alt_pair_search = true;
+    size_t pass1_alt_cut_limit = current_mapping_gate_count >= 3000
+        ? size_t(4)
+        : size_t(std::max(4, MAX_I5_CANDIDATES));
+    PerformanceTimer pass1_timer;
+    pass1_timer.begin();
+    if (entries.size() <= pass1_global_match_limit) {
+        vector<PostPackCandidateEdge> edges;
+        vector<size_t> degrees;
+        vector<vector<const Cut*>> pass1_prepared_cuts;
+        const vector<vector<const Cut*>> *pass1_cut_view = nullptr;
+        if (pass1_alt_pair_search) {
+            PerformanceTimer cut_prepare_timer;
+            cut_prepare_timer.begin();
+            PreparePostPackCandidateCuts(entries, pass1_alt_cut_limit, pass1_prepared_cuts);
+            EndPhaseTimer(cut_prepare_timer, "post-pack pass1 cut prep");
+            pass1_cut_view = &pass1_prepared_cuts;
+        }
+        PerformanceTimer edge_timer;
+        edge_timer.begin();
+        int pass1_worker_threads = 0;
+        CollectPostPackCandidateEdges(single_luts, entries,
+                                      0, entries.size(),
+                                      POSTPACK_PASS1_SCAN_WINDOW > 0
+                                          ? size_t(POSTPACK_PASS1_SCAN_WINDOW)
+                                          : size_t(0),
+                                      pass1_cut_view,
+                                      edges, degrees, pass1_worker_threads);
+        edge_timer.end();
+        log("  Timing: post-pack pass1 edge build %.3f s (%zu edges, workers=%d)\n",
+            edge_timer.sec(), edges.size(), pass1_worker_threads);
 
-        // 搜索所有可能的配对候选
-        int best_j = -1;
-        LUT6DInfo best_lut_info;
-        size_t best_merged_size = 999;
-        size_t j_end = entries.size();
-        if (POSTPACK_PASS1_SCAN_WINDOW > 0)
-            j_end = std::min(entries.size(), i + 1 + size_t(POSTPACK_PASS1_SCAN_WINDOW));
+        sort(edges.begin(), edges.end(),
+             [&](const PostPackCandidateEdge &a, const PostPackCandidateEdge &b) {
+                 size_t a_deg_sum = degrees[a.pos_a] + degrees[a.pos_b];
+                 size_t b_deg_sum = degrees[b.pos_a] + degrees[b.pos_b];
+                 if (a_deg_sum != b_deg_sum)
+                     return a_deg_sum < b_deg_sum;
+                 size_t a_deg_max = std::max(degrees[a.pos_a], degrees[a.pos_b]);
+                 size_t b_deg_max = std::max(degrees[b.pos_a], degrees[b.pos_b]);
+                 if (a_deg_max != b_deg_max)
+                     return a_deg_max < b_deg_max;
+                 if (a.level_gap != b.level_gap)
+                     return a.level_gap < b.level_gap;
+                 if (a.merged_size != b.merged_size)
+                     return a.merged_size < b.merged_size;
+                 if (a.shared_inputs != b.shared_inputs)
+                     return a.shared_inputs > b.shared_inputs;
+                 size_t a_inputs = entries[a.pos_a].real_inputs + entries[a.pos_b].real_inputs;
+                 size_t b_inputs = entries[b.pos_a].real_inputs + entries[b.pos_b].real_inputs;
+                 if (a_inputs != b_inputs)
+                     return a_inputs < b_inputs;
+                 if (entries[a.pos_a].idx != entries[b.pos_a].idx)
+                     return entries[a.pos_a].idx < entries[b.pos_a].idx;
+                 return entries[a.pos_b].idx < entries[b.pos_b].idx;
+             });
 
-        for (size_t j = i + 1; j < j_end; j++) {
-            if (consumed.count(entries[j].idx)) continue;
-            // 快速过滤：signature合并后popcount检查
-            uint64_t combined_sig = entries[i].signature | entries[j].signature;
-            if (__builtin_popcountll(combined_sig) > LUT_SIZE) continue;
+        vector<int> mate(entries.size(), -1);
+        for (int edge_idx = 0; edge_idx < int(edges.size()); edge_idx++) {
+            auto &edge = edges[edge_idx];
+            if (mate[edge.pos_a] >= 0 || mate[edge.pos_b] >= 0)
+                continue;
+            mate[edge.pos_a] = int(edge.pos_b);
+            mate[edge.pos_b] = int(edge.pos_a);
+        }
 
-            // 合并叶子
-            pool<SigBit> merged_leaves = entries[i].leaves;
-            for (auto &leaf : entries[j].leaves)
-                merged_leaves.insert(leaf);
-            size_t merged_size = merged_leaves.size();
-
-            // 必须能装入LUT6D
-            // 共享输入：merged_size <= 6，可用共享信号做I5
-            // 析取输入：merged_size <= 5，用常量State::S1做I5
-            if (merged_size > 6) continue;
-            if (merged_size > best_merged_size) continue;  // 只找最紧凑的配对
-
-            SingleLUTInfo &lutA = single_luts[a_idx];
-            SingleLUTInfo &lutB = single_luts[entries[j].idx];
-            SigBit outA = lutA.output;
-            SigBit outB = lutB.output;
-
-            // 依赖对不能直接打包（例如 A 依赖 B 输出），否则容易形成输入=输出自环。
-            if (entries[i].leaves.count(outB) || entries[j].leaves.count(outA))
+        for (size_t pos_a = 0; pos_a < entries.size(); pos_a++) {
+            if (mate[pos_a] < 0)
+                continue;
+            size_t pos_b = size_t(mate[pos_a]);
+            if (pos_a >= pos_b)
+                continue;
+            if (pos_b >= entries.size() || mate[pos_b] != int(pos_a))
                 continue;
 
-            Cell *cellA = bit2driver.count(lutA.output) ? bit2driver[lutA.output] : nullptr;
-            Cell *cellB = bit2driver.count(lutB.output) ? bit2driver[lutB.output] : nullptr;
-            if (!cellA || !cellB) continue;
-
-            // 构建候选I5集合
-            pool<SigBit> potential_I5;
-            if (merged_size + 1 <= (size_t)LUT_SIZE)
-                potential_I5.insert(State::S1);  // 常量selector
-
-            // 共享信号也可以做I5
-            for (auto &leaf : entries[i].leaves) {
-                if (entries[j].leaves.count(leaf))
-                    potential_I5.insert(leaf);
-            }
-
-            // 没有任何可用的I5，跳过
-            if (potential_I5.empty()) continue;
-
-            // 用既有基础设施尝试I5和角色分配
-            Cut fake_cut;
-            fake_cut.leaves = merged_leaves;
-            SigBit chosen_i5;
-            bool isZ;
-            Cut chosen_cut;
-            if (!SelectI5AndRoleWithVerify(cellA, cellB, fake_cut, potential_I5,
-                                           chosen_i5, isZ, chosen_cut))
-                continue;
-
-            // 构建LUT6DInfo
-            DualOutputCandidate temp;
-            temp.root1 = cellA;
-            temp.root2 = cellB;
-            temp.merged_cut = chosen_cut;
-            temp.I5 = chosen_i5;
-            temp.isZ = isZ;
             LUT6DInfo lut_info;
-            BuildLUT6DInfoFromCandidate(temp, lut_info);
-
-            // 再次全验证
-            if (!VerifyLUT6DMapping(lut_info, cellA, cellB, isZ))
+            size_t level_gap = 0;
+            size_t merged_size = 0;
+            size_t shared_inputs = 0;
+            bool ok = pass1_alt_pair_search
+                ? BuildPostPackPairWithPreparedCuts(single_luts, entries[pos_a], entries[pos_b],
+                                                    pass1_prepared_cuts[pos_a],
+                                                    pass1_prepared_cuts[pos_b],
+                                                    lut_info, level_gap, merged_size, shared_inputs)
+                : BuildPostPackPairFromEntries(single_luts, entries[pos_a], entries[pos_b],
+                                               lut_info, level_gap, merged_size, shared_inputs);
+            if (!ok)
                 continue;
-
-            // 找到有效配对
-            if (best_j < 0 || merged_size < best_merged_size) {
-                best_j = (int)j;
-                best_lut_info = lut_info;
-                best_merged_size = merged_size;
+            if (consumed.count(entries[pos_a].idx) || consumed.count(entries[pos_b].idx))
+                continue;
+            commit_pair(entries[pos_a].idx, entries[pos_b].idx, lut_info);
+        }
+    } else {
+        vector<size_t> option_count(entries.size(), 0);
+        size_t scan_radius = POSTPACK_PASS1_SCAN_WINDOW > 0
+            ? size_t(POSTPACK_PASS1_SCAN_WINDOW)
+            : entries.size();
+        for (size_t i = 0; i < entries.size(); i++) {
+            size_t j_begin = (scan_radius < i) ? (i - scan_radius) : 0;
+            size_t j_end = std::min(entries.size(), i + scan_radius + 1);
+            for (size_t j = std::max(i + 1, j_begin); j < j_end; j++) {
+                if (!ApproxPostPackPairPossible(single_luts, entries[i], entries[j]))
+                    continue;
+                option_count[i]++;
+                option_count[j]++;
             }
         }
 
-        if (best_j >= 0) {
-            size_t b_idx = entries[best_j].idx;
-            SingleLUTInfo &lutA = single_luts[a_idx];
-            SingleLUTInfo &lutB = single_luts[b_idx];
+        vector<size_t> processing_order(entries.size());
+        std::iota(processing_order.begin(), processing_order.end(), 0);
+        sort(processing_order.begin(), processing_order.end(),
+             [&](size_t a, size_t b) {
+                 if (option_count[a] != option_count[b])
+                     return option_count[a] < option_count[b];
+                 if (entries[a].real_inputs != entries[b].real_inputs)
+                     return entries[a].real_inputs < entries[b].real_inputs;
+                 return entries[a].idx < entries[b].idx;
+             });
 
-            best_lut_info.removedNodes.insert(lutA.removedNodes.begin(), lutA.removedNodes.end());
-            best_lut_info.removedNodes.insert(lutB.removedNodes.begin(), lutB.removedNodes.end());
-            dual_luts.push_back(best_lut_info);
-            consumed.insert(a_idx);
-            consumed.insert(b_idx);
-            packed++;
+        for (size_t order_idx = 0; order_idx < processing_order.size(); order_idx++) {
+            size_t i = processing_order[order_idx];
+            if (consumed.count(entries[i].idx)) continue;
+            size_t a_idx = entries[i].idx;
+
+            int best_j = -1;
+            LUT6DInfo best_lut_info;
+            size_t best_level_gap = std::numeric_limits<size_t>::max();
+            size_t best_merged_size = 999;
+            size_t best_shared_inputs = 0;
+            size_t best_partner_inputs = 999;
+            size_t j_begin = (scan_radius < i) ? (i - scan_radius) : 0;
+            size_t j_end = std::min(entries.size(), i + scan_radius + 1);
+
+            for (size_t j = j_begin; j < j_end; j++) {
+                if (j == i)
+                    continue;
+                if (consumed.count(entries[j].idx)) continue;
+                if (!ApproxPostPackPairPossible(single_luts, entries[i], entries[j]))
+                    continue;
+
+                LUT6DInfo lut_info;
+                size_t level_gap = 0;
+                size_t merged_size = 0;
+                size_t shared_inputs = 0;
+                if (!BuildPostPackPairFromEntries(single_luts, entries[i], entries[j],
+                                                  lut_info, level_gap, merged_size, shared_inputs))
+                    continue;
+                if (merged_size > best_merged_size)
+                    continue;
+
+                if (best_j < 0 || level_gap < best_level_gap ||
+                    (level_gap == best_level_gap && merged_size < best_merged_size) ||
+                    (level_gap == best_level_gap && merged_size == best_merged_size &&
+                     shared_inputs > best_shared_inputs) ||
+                    (level_gap == best_level_gap && merged_size == best_merged_size &&
+                     shared_inputs == best_shared_inputs &&
+                     entries[j].real_inputs < best_partner_inputs)) {
+                    best_j = (int)j;
+                    best_lut_info = lut_info;
+                    best_level_gap = level_gap;
+                    best_merged_size = merged_size;
+                    best_shared_inputs = shared_inputs;
+                    best_partner_inputs = entries[j].real_inputs;
+                }
+            }
+
+            if (best_j >= 0)
+                commit_pair(a_idx, entries[best_j].idx, best_lut_info);
         }
     }
+    EndPhaseTimer(pass1_timer, "post-pack pass1");
 
     if (packed > 0) {
         vector<SingleLUTInfo> remaining;
@@ -2707,7 +4584,10 @@ static void PostPackSingleLUTs(vector<LUT6DInfo> &dual_luts,
 
     // 第二轮：利用备选cuts尝试更多配对机会
     // 对于6输入的LUT，如果节点有更小的备选cut，用备选cut可能使配对可行
-    if (single_luts.size() < 2) return;
+    if (single_luts.size() < 2) {
+        EndPhaseTimer(postpack_total_timer, "post-pack total");
+        return;
+    }
 
     // 重新构建entries
     consumed.clear();
@@ -2757,138 +4637,228 @@ static void PostPackSingleLUTs(vector<LUT6DInfo> &dual_luts,
         log("  Post-packing pass 2: chunking candidates total=%zu chunk=%zu full_chunks=%zu run_chunks=%zu\n",
             entries.size(), pass2_chunk_size, full_chunk_count, pass2_chunks.size());
     }
-    if (entries.size() < 2) return;
+    if (entries.size() < 2) {
+        EndPhaseTimer(postpack_total_timer, "post-pack total");
+        return;
+    }
 
     size_t packed2 = 0;
-    size_t pass2_cut_limit = size_t(std::max(4, MAX_I5_CANDIDATES + 2));
+    size_t pass2_cut_limit = size_t(std::max(8, MAX_I5_CANDIDATES * 2));
+    bool pass2_global_match = entries.size() <= 2048 && current_mapping_gate_count <= 5000;
+    vector<vector<const Cut*>> pass2_prepared_cuts;
+    if (pass2_global_match) {
+        PerformanceTimer cut_prepare_timer;
+        cut_prepare_timer.begin();
+        PreparePostPackCandidateCuts(entries, pass2_cut_limit, pass2_prepared_cuts);
+        EndPhaseTimer(cut_prepare_timer, "post-pack pass2 cut prep");
+    }
+    PerformanceTimer pass2_timer;
+    pass2_timer.begin();
     for (size_t chunk_idx = 0; chunk_idx < pass2_chunks.size(); chunk_idx++) {
         size_t chunk_begin = pass2_chunks[chunk_idx].first;
         size_t chunk_end = pass2_chunks[chunk_idx].second;
         if (chunk_end <= chunk_begin + 1)
             continue;
         size_t packed_before_chunk = packed2;
-	    for (size_t i = chunk_begin; i < chunk_end; i++) {
-	        if (consumed.count(entries[i].idx)) continue;
-	        size_t a_idx = entries[i].idx;
-            SigBit outA = single_luts[a_idx].output;
+        if (pass2_global_match) {
+            vector<PostPackCandidateEdge> edges;
+            vector<size_t> degrees;
+            PerformanceTimer edge_timer;
+            edge_timer.begin();
+            int pass2_worker_threads = 0;
+            CollectPostPackCandidateEdges(single_luts, entries,
+                                          chunk_begin, chunk_end,
+                                          POSTPACK_PASS2_SCAN_WINDOW > 0
+                                              ? size_t(POSTPACK_PASS2_SCAN_WINDOW)
+                                              : size_t(0),
+                                          &pass2_prepared_cuts,
+                                          edges, degrees, pass2_worker_threads);
+            edge_timer.end();
+            log("  Timing: post-pack pass2 chunk %zu/%zu edge build %.3f s (%zu edges, workers=%d)\n",
+                chunk_idx + 1, pass2_chunks.size(), edge_timer.sec(), edges.size(), pass2_worker_threads);
 
-	        Cell *cellA = bit2driver.count(single_luts[a_idx].output)
-	                          ? bit2driver[single_luts[a_idx].output] : nullptr;
-	        if (!cellA) continue;
+            sort(edges.begin(), edges.end(),
+                 [&](const PostPackCandidateEdge &a, const PostPackCandidateEdge &b) {
+                     size_t a_deg_sum = degrees[a.pos_a - chunk_begin] + degrees[a.pos_b - chunk_begin];
+                     size_t b_deg_sum = degrees[b.pos_a - chunk_begin] + degrees[b.pos_b - chunk_begin];
+                     if (a_deg_sum != b_deg_sum)
+                         return a_deg_sum < b_deg_sum;
+                     size_t a_deg_max = std::max(degrees[a.pos_a - chunk_begin], degrees[a.pos_b - chunk_begin]);
+                     size_t b_deg_max = std::max(degrees[b.pos_a - chunk_begin], degrees[b.pos_b - chunk_begin]);
+                     if (a_deg_max != b_deg_max)
+                         return a_deg_max < b_deg_max;
+                     if (a.level_gap != b.level_gap)
+                         return a.level_gap < b.level_gap;
+                     if (a.merged_size != b.merged_size)
+                         return a.merged_size < b.merged_size;
+                     if (a.shared_inputs != b.shared_inputs)
+                         return a.shared_inputs > b.shared_inputs;
+                     if (entries[a.pos_a].idx != entries[b.pos_a].idx)
+                         return entries[a.pos_a].idx < entries[b.pos_a].idx;
+                     return entries[a.pos_b].idx < entries[b.pos_b].idx;
+                 });
 
-        // 收集A的备选cuts（包括best cut和更小的cuts）
-	        vector<const Cut*> cuts_a;
-	        if (cell2cuts.count(cellA)) {
-	            for (auto &c : cell2cuts[cellA]) {
-	                if (c.leaves.size() <= 5) cuts_a.push_back(&c);
-	            }
-	        }
-            if (cuts_a.size() > pass2_cut_limit)
-                cuts_a.resize(pass2_cut_limit);
-	        if (cuts_a.empty()) continue;
+            vector<int> mate(chunk_end - chunk_begin, -1);
+            for (const auto &edge : edges) {
+                size_t local_a = edge.pos_a - chunk_begin;
+                size_t local_b = edge.pos_b - chunk_begin;
+                if (mate[local_a] >= 0 || mate[local_b] >= 0)
+                    continue;
+                mate[local_a] = int(edge.pos_b);
+                mate[local_b] = int(edge.pos_a);
+            }
 
-        int best_j = -1;
-        LUT6DInfo best_lut_info;
-        size_t best_merged_size = 999;
-        size_t j_end_pass2 = chunk_end;
-        if (POSTPACK_PASS2_SCAN_WINDOW > 0)
-            j_end_pass2 = std::min(chunk_end, i + 1 + size_t(POSTPACK_PASS2_SCAN_WINDOW));
-
-	        for (size_t j = i + 1; j < j_end_pass2; j++) {
-	            if (consumed.count(entries[j].idx)) continue;
-	            size_t b_idx_inner = entries[j].idx;
-                SigBit outB = single_luts[b_idx_inner].output;
-
-                if (entries[i].leaves.count(outB) || entries[j].leaves.count(outA))
+            for (size_t i = chunk_begin; i < chunk_end; i++) {
+                int mate_pos = mate[i - chunk_begin];
+                if (mate_pos < 0)
+                    continue;
+                size_t j = size_t(mate_pos);
+                if (i >= j)
+                    continue;
+                if (j >= chunk_end || mate[j - chunk_begin] != int(i))
                     continue;
 
-	            Cell *cellB = bit2driver.count(single_luts[b_idx_inner].output)
-	                              ? bit2driver[single_luts[b_idx_inner].output] : nullptr;
-	            if (!cellB) continue;
+                LUT6DInfo lut_info;
+                size_t level_gap = 0;
+                size_t merged_size = 0;
+                size_t shared_inputs = 0;
+                if (!BuildPostPackPairWithPreparedCuts(single_luts, entries[i], entries[j],
+                                                       pass2_prepared_cuts[i],
+                                                       pass2_prepared_cuts[j],
+                                                       lut_info, level_gap, merged_size, shared_inputs))
+                    continue;
+                if (consumed.count(entries[i].idx) || consumed.count(entries[j].idx))
+                    continue;
+                commit_pair(entries[i].idx, entries[j].idx, lut_info);
+                packed2++;
+            }
+        } else {
+            for (size_t i = chunk_begin; i < chunk_end; i++) {
+                if (consumed.count(entries[i].idx))
+                    continue;
+                size_t a_idx = entries[i].idx;
+                SigBit outA = single_luts[a_idx].output;
 
-	            vector<const Cut*> cuts_b;
-	            if (cell2cuts.count(cellB)) {
-	                for (auto &c : cell2cuts[cellB]) {
-	                    if (c.leaves.size() <= 5) cuts_b.push_back(&c);
-	                }
-	            }
-                if (cuts_b.size() > pass2_cut_limit)
-                    cuts_b.resize(pass2_cut_limit);
-	            if (cuts_b.empty()) continue;
+                Cell *cellA = bit2driver.count(single_luts[a_idx].output)
+                                  ? bit2driver[single_luts[a_idx].output] : nullptr;
+                if (!cellA)
+                    continue;
 
-            // 尝试所有cut组合
-            bool found_pair = false;
-	            for (auto *ca : cuts_a) {
-	                if (found_pair) break;
-	                for (auto *cb : cuts_b) {
-                        if (ca->leaves.count(outB) || cb->leaves.count(outA))
-                            continue;
+                vector<const Cut*> cuts_a;
+                CollectPostPackCandidateCuts(cellA, pass2_cut_limit, cuts_a);
+                if (cuts_a.empty())
+                    continue;
 
-	                    // 快速feasibility检查
-	                    if (!Cut::canMergeFast(*ca, *cb, LUT_SIZE)) continue;
+                int best_j = -1;
+                LUT6DInfo best_lut_info;
+                size_t best_merged_size = 999;
+                size_t best_shared_inputs = 0;
+                size_t best_partner_cut_inputs = 999;
+                size_t j_end_pass2 = chunk_end;
+                if (POSTPACK_PASS2_SCAN_WINDOW > 0)
+                    j_end_pass2 = std::min(chunk_end, i + 1 + size_t(POSTPACK_PASS2_SCAN_WINDOW));
 
-                    pool<SigBit> merged_leaves = ca->leaves;
-                    for (auto &leaf : cb->leaves) merged_leaves.insert(leaf);
-                    size_t merged_size = merged_leaves.size();
-                    if (merged_size > 6) continue;
-                    if (merged_size >= best_merged_size) continue;
+                for (size_t j = i + 1; j < j_end_pass2; j++) {
+                    if (consumed.count(entries[j].idx))
+                        continue;
+                    size_t b_idx_inner = entries[j].idx;
+                    SigBit outB = single_luts[b_idx_inner].output;
 
-                    pool<SigBit> potential_I5;
-                    if (merged_size + 1 <= (size_t)LUT_SIZE)
-                        potential_I5.insert(State::S1);
-                    for (auto &leaf : ca->leaves) {
-                        if (cb->leaves.count(leaf)) potential_I5.insert(leaf);
+                    if (entries[i].leaves.count(outB) || entries[j].leaves.count(outA))
+                        continue;
+
+                    Cell *cellB = bit2driver.count(single_luts[b_idx_inner].output)
+                                      ? bit2driver[single_luts[b_idx_inner].output] : nullptr;
+                    if (!cellB)
+                        continue;
+
+                    vector<const Cut*> cuts_b;
+                    CollectPostPackCandidateCuts(cellB, pass2_cut_limit, cuts_b);
+                    if (cuts_b.empty())
+                        continue;
+
+                    for (auto *ca : cuts_a) {
+                        for (auto *cb : cuts_b) {
+                            if (ca->leaves.count(outB) || cb->leaves.count(outA))
+                                continue;
+                            if (!Cut::canMergeFast(*ca, *cb, LUT_SIZE))
+                                continue;
+
+                            pool<SigBit> merged_leaves = ca->leaves;
+                            for (auto &leaf : cb->leaves)
+                                merged_leaves.insert(leaf);
+                            size_t merged_size = merged_leaves.size();
+                            if (merged_size > 6)
+                                continue;
+                            size_t shared_inputs = ca->leaves.size() + cb->leaves.size() - merged_size;
+                            if (merged_size > best_merged_size)
+                                continue;
+                            if (merged_size == best_merged_size && shared_inputs < best_shared_inputs)
+                                continue;
+                            if (merged_size == best_merged_size && shared_inputs == best_shared_inputs &&
+                                cb->leaves.size() >= best_partner_cut_inputs)
+                                continue;
+
+                            pool<SigBit> potential_I5;
+                            if (merged_size + 1 <= size_t(LUT_SIZE))
+                                potential_I5.insert(State::S1);
+                            for (auto &leaf : ca->leaves)
+                                potential_I5.insert(leaf);
+                            for (auto &leaf : cb->leaves)
+                                potential_I5.insert(leaf);
+                            if (potential_I5.empty())
+                                continue;
+
+                            Cut fake_cut;
+                            fake_cut.leaves = merged_leaves;
+                            SigBit chosen_i5;
+                            bool isZ;
+                            Cut chosen_cut;
+                            if (!SelectI5AndRoleWithVerify(cellA, cellB, fake_cut, potential_I5,
+                                                           chosen_i5, isZ, chosen_cut))
+                                continue;
+
+                            DualOutputCandidate temp;
+                            temp.root1 = cellA;
+                            temp.root2 = cellB;
+                            temp.merged_cut = chosen_cut;
+                            temp.I5 = chosen_i5;
+                            temp.isZ = isZ;
+                            LUT6DInfo lut_info;
+                            BuildLUT6DInfoFromCandidate(temp, lut_info);
+
+                            if (!VerifyLUT6DMapping(lut_info, cellA, cellB, isZ))
+                                continue;
+
+                            best_j = int(j);
+                            best_lut_info = lut_info;
+                            best_merged_size = merged_size;
+                            best_shared_inputs = shared_inputs;
+                            best_partner_cut_inputs = cb->leaves.size();
+                        }
                     }
-                    if (potential_I5.empty()) continue;
+                }
 
-                    Cut fake_cut;
-                    fake_cut.leaves = merged_leaves;
-                    SigBit chosen_i5;
-                    bool isZ;
-                    Cut chosen_cut;
-                    if (!SelectI5AndRoleWithVerify(cellA, cellB, fake_cut, potential_I5,
-                                                   chosen_i5, isZ, chosen_cut))
-                        continue;
-
-                    DualOutputCandidate temp;
-                    temp.root1 = cellA;
-                    temp.root2 = cellB;
-                    temp.merged_cut = chosen_cut;
-                    temp.I5 = chosen_i5;
-                    temp.isZ = isZ;
-                    LUT6DInfo lut_info;
-                    BuildLUT6DInfoFromCandidate(temp, lut_info);
-
-                    if (!VerifyLUT6DMapping(lut_info, cellA, cellB, isZ))
-                        continue;
-
-                    best_j = (int)j;
-                    best_lut_info = lut_info;
-                    best_merged_size = merged_size;
-                    found_pair = true;
-                    break;
+                if (best_j >= 0) {
+                    size_t b_idx2 = entries[best_j].idx;
+                    best_lut_info.removedNodes.insert(single_luts[a_idx].removedNodes.begin(),
+                                                      single_luts[a_idx].removedNodes.end());
+                    best_lut_info.removedNodes.insert(single_luts[b_idx2].removedNodes.begin(),
+                                                      single_luts[b_idx2].removedNodes.end());
+                    dual_luts.push_back(best_lut_info);
+                    consumed.insert(a_idx);
+                    consumed.insert(b_idx2);
+                    packed2++;
                 }
             }
         }
-
-        if (best_j >= 0) {
-            size_t b_idx2 = entries[best_j].idx;
-            best_lut_info.removedNodes.insert(single_luts[a_idx].removedNodes.begin(),
-                                               single_luts[a_idx].removedNodes.end());
-            best_lut_info.removedNodes.insert(single_luts[b_idx2].removedNodes.begin(),
-                                               single_luts[b_idx2].removedNodes.end());
-            dual_luts.push_back(best_lut_info);
-            consumed.insert(a_idx);
-            consumed.insert(b_idx2);
-            packed2++;
-        }
-    }
         size_t merged_in_chunk = packed2 - packed_before_chunk;
         if (merged_in_chunk > 0) {
             log("  Post-packing pass 2 chunk %zu/%zu: merged %zu pairs\n",
                 chunk_idx + 1, pass2_chunks.size(), merged_in_chunk);
         }
     }
+    EndPhaseTimer(pass2_timer, "post-pack pass2");
 
     if (packed2 > 0) {
         vector<SingleLUTInfo> remaining;
@@ -2900,6 +4870,8 @@ static void PostPackSingleLUTs(vector<LUT6DInfo> &dual_luts,
         single_luts = std::move(remaining);
         log("  Post-packing pass 2 (alt-cuts): merged %zu more pairs\n", packed2);
     }
+
+    EndPhaseTimer(postpack_total_timer, "post-pack total");
 }
 
 void LUT6DMapping(Module *module, vector<Cell *> &gates)
@@ -2908,6 +4880,20 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     prime_inputs.clear();
     prime_outputs.clear();
     GetPrimeInputOutput(module, prime_inputs, prime_outputs);
+
+    PerformanceTimer mapping_total_timer;
+    mapping_total_timer.begin();
+    float init_refs_sec = 0.0f;
+    float cut_generation_sec = 0.0f;
+    float timing_analysis_sec = 0.0f;
+    float mapping_rounds_sec = 0.0f;
+    float area_recovery_sec = 0.0f;
+    float mode1_sec = 0.0f;
+    float mode2_sec = 0.0f;
+    float mode3_sec = 0.0f;
+    float postpack_sec = 0.0f;
+    float repair_sec = 0.0f;
+    float emit_sec = 0.0f;
 
     // 基于网络规模做自适应预算，优先控制复杂度的增长速度。
     int saved_max_cuts_per_node = MAX_CUTS_PER_NODE;
@@ -2923,78 +4909,121 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     int saved_pair_seed_multiplier = PAIR_SEED_MULTIPLIER;
 
     size_t gate_count = gates.size();
-    if (gate_count >= 200000) {
-        // 超大网络：提升post-pack覆盖，重点改善hyp类算例。
-        MAX_CUTS_PER_NODE = 40;
-        MAX_PAIRS_PER_NODE = 14;
-        MAX_DISJOINT_PAIRS_PER_NODE = 10;
-        LAYER_CUTS_PER_NODE = 2;
-        MAX_I5_CANDIDATES = 6;
-        MAPPING_ROUNDS = 4;
-        POSTPACK_PASS1_SCAN_WINDOW = 320;
-        POSTPACK_PASS2_MAX_SINGLE = 24000;
-        POSTPACK_PASS2_SCAN_WINDOW = 80;
-        POSTPACK_PASS2_MAX_CHUNKS = 2;
-        PAIR_SEED_MULTIPLIER = 8;
-    } else if (gate_count >= 50000) {
-        // 很大网络：重点给mode3/post-pack更多空间，覆盖multiplier一类。
-        MAX_CUTS_PER_NODE = 56;
-        MAX_PAIRS_PER_NODE = 20;
-        MAX_DISJOINT_PAIRS_PER_NODE = 14;
-        LAYER_CUTS_PER_NODE = 3;
-        MAX_I5_CANDIDATES = 6;
-        MAPPING_ROUNDS = 6;
-        POSTPACK_PASS1_SCAN_WINDOW = 512;
-        POSTPACK_PASS2_MAX_SINGLE = 12000;
-        POSTPACK_PASS2_SCAN_WINDOW = 128;
-        POSTPACK_PASS2_MAX_CHUNKS = 1;
-        PAIR_SEED_MULTIPLIER = 10;
-    } else if (gate_count >= 30000) {
-        // 中大网络：sqrt常落在此区间，提升切割质量并允许更充分二次配对。
-        MAX_CUTS_PER_NODE = 72;
-        MAX_PAIRS_PER_NODE = 24;
-        MAX_DISJOINT_PAIRS_PER_NODE = 16;
-        LAYER_CUTS_PER_NODE = 3;
-        MAX_I5_CANDIDATES = 6;
-        MAPPING_ROUNDS = 6;
-        POSTPACK_PASS1_SCAN_WINDOW = 640;
-        POSTPACK_PASS2_MAX_SINGLE = 10000;
-        POSTPACK_PASS2_SCAN_WINDOW = 160;
-        POSTPACK_PASS2_MAX_CHUNKS = 1;
-        PAIR_SEED_MULTIPLIER = 11;
-    } else if (gate_count >= 3000) {
-        MAX_CUTS_PER_NODE = 144;
-        MAX_PAIRS_PER_NODE = 32;
-        MAX_DISJOINT_PAIRS_PER_NODE = 20;
-        LAYER_CUTS_PER_NODE = 3;
-        MAX_I5_CANDIDATES = 8;
-        MAPPING_ROUNDS = 8;
-        POSTPACK_PASS1_SCAN_WINDOW = 640;
-        POSTPACK_PASS2_MAX_SINGLE = 6144;
-        POSTPACK_PASS2_SCAN_WINDOW = 256;
-        POSTPACK_PASS2_MAX_CHUNKS = 2;
-        PAIR_SEED_MULTIPLIER = 14;
-    } else if (gate_count >= 1500) {
-        MAX_CUTS_PER_NODE = 64;
-        MAX_PAIRS_PER_NODE = 20;
-        MAX_DISJOINT_PAIRS_PER_NODE = 12;
-        LAYER_CUTS_PER_NODE = 3;
-        MAX_I5_CANDIDATES = 6;
-        MAPPING_ROUNDS = 5;
-        POSTPACK_PASS1_SCAN_WINDOW = 256;
-        POSTPACK_PASS2_MAX_SINGLE = 2048;
-        POSTPACK_PASS2_SCAN_WINDOW = 192;
-        POSTPACK_PASS2_MAX_CHUNKS = 1;
-        PAIR_SEED_MULTIPLIER = 9;
+    current_mapping_gate_count = gate_count;
+    if (!disable_adaptive_budget) {
+        if (gate_count >= 200000) {
+            // 超大网络：提升post-pack覆盖，重点改善hyp类算例。
+            MAX_CUTS_PER_NODE = 40;
+            MAX_PAIRS_PER_NODE = 14;
+            MAX_DISJOINT_PAIRS_PER_NODE = 10;
+            LAYER_CUTS_PER_NODE = 2;
+            MAX_I5_CANDIDATES = 6;
+            MAPPING_ROUNDS = 4;
+            POSTPACK_PASS1_SCAN_WINDOW = 320;
+            POSTPACK_PASS2_MAX_SINGLE = 24000;
+            POSTPACK_PASS2_SCAN_WINDOW = 80;
+            POSTPACK_PASS2_MAX_CHUNKS = 2;
+            PAIR_SEED_MULTIPLIER = 8;
+        } else if (gate_count >= 50000) {
+            // 很大网络：重点给mode3/post-pack更多空间，覆盖multiplier一类。
+            MAX_CUTS_PER_NODE = 56;
+            MAX_PAIRS_PER_NODE = 20;
+            MAX_DISJOINT_PAIRS_PER_NODE = 14;
+            LAYER_CUTS_PER_NODE = 3;
+            MAX_I5_CANDIDATES = 6;
+            MAPPING_ROUNDS = 6;
+            POSTPACK_PASS1_SCAN_WINDOW = 512;
+            POSTPACK_PASS2_MAX_SINGLE = 12000;
+            POSTPACK_PASS2_SCAN_WINDOW = 128;
+            POSTPACK_PASS2_MAX_CHUNKS = 1;
+            PAIR_SEED_MULTIPLIER = 10;
+        } else if (gate_count >= 30000) {
+            // 中大网络：sqrt常落在此区间，提升切割质量并允许更充分二次配对。
+            MAX_CUTS_PER_NODE = 72;
+            MAX_PAIRS_PER_NODE = 24;
+            MAX_DISJOINT_PAIRS_PER_NODE = 16;
+            LAYER_CUTS_PER_NODE = 3;
+            MAX_I5_CANDIDATES = 6;
+            MAPPING_ROUNDS = 6;
+            POSTPACK_PASS1_SCAN_WINDOW = 768;
+            POSTPACK_PASS2_MAX_SINGLE = 20000;
+            POSTPACK_PASS2_SCAN_WINDOW = 192;
+            POSTPACK_PASS2_MAX_CHUNKS = 2;
+            PAIR_SEED_MULTIPLIER = 12;
+        } else if (gate_count >= 5000) {
+            // 中等偏大网络：给log2/multiplier更多cut多样性，配合大图pair预筛。
+            MAX_CUTS_PER_NODE = 160;
+            MAX_PAIRS_PER_NODE = 40;
+            MAX_DISJOINT_PAIRS_PER_NODE = 24;
+            LAYER_CUTS_PER_NODE = 4;
+            MAX_I5_CANDIDATES = 8;
+            MAPPING_ROUNDS = 8;
+            POSTPACK_PASS1_SCAN_WINDOW = 768;
+            POSTPACK_PASS2_MAX_SINGLE = 8192;
+            POSTPACK_PASS2_SCAN_WINDOW = 256;
+            POSTPACK_PASS2_MAX_CHUNKS = 2;
+            PAIR_SEED_MULTIPLIER = 16;
+        } else if (gate_count >= 3000) {
+            MAX_CUTS_PER_NODE = 144;
+            MAX_PAIRS_PER_NODE = 32;
+            MAX_DISJOINT_PAIRS_PER_NODE = 20;
+            LAYER_CUTS_PER_NODE = 3;
+            MAX_I5_CANDIDATES = 8;
+            MAPPING_ROUNDS = 8;
+            POSTPACK_PASS1_SCAN_WINDOW = 640;
+            POSTPACK_PASS2_MAX_SINGLE = 6144;
+            POSTPACK_PASS2_SCAN_WINDOW = 256;
+            POSTPACK_PASS2_MAX_CHUNKS = 2;
+            PAIR_SEED_MULTIPLIER = 14;
+        } else if (gate_count >= 1500) {
+            MAX_CUTS_PER_NODE = 64;
+            MAX_PAIRS_PER_NODE = 20;
+            MAX_DISJOINT_PAIRS_PER_NODE = 12;
+            LAYER_CUTS_PER_NODE = 3;
+            MAX_I5_CANDIDATES = 6;
+            MAPPING_ROUNDS = 5;
+            POSTPACK_PASS1_SCAN_WINDOW = 512;
+            POSTPACK_PASS2_MAX_SINGLE = 3072;
+            POSTPACK_PASS2_SCAN_WINDOW = 256;
+            POSTPACK_PASS2_MAX_CHUNKS = 1;
+            PAIR_SEED_MULTIPLIER = 9;
+        } else if (gate_count >= 700) {
+            // max 一类中小图仍有明显 level 裕量，给 cut 库更多空间以暴露额外可打包对。
+            MAX_CUTS_PER_NODE = 160;
+            MAX_PAIRS_PER_NODE = 28;
+            MAX_DISJOINT_PAIRS_PER_NODE = 16;
+            LAYER_CUTS_PER_NODE = 4;
+            MAX_I5_CANDIDATES = 8;
+            MAPPING_ROUNDS = 6;
+            POSTPACK_PASS1_SCAN_WINDOW = 768;
+            POSTPACK_PASS2_MAX_SINGLE = 4096;
+            POSTPACK_PASS2_SCAN_WINDOW = 256;
+            POSTPACK_PASS2_MAX_CHUNKS = 1;
+            PAIR_SEED_MULTIPLIER = 14;
+        }
     }
+
+    if (mapping_rounds_override >= 1)
+        MAPPING_ROUNDS = mapping_rounds_override;
 
     log("Runtime budget: gates=%zu cuts=%d pairs=%d disjoint=%d layer_cuts=%d i5=%d rounds=%d postpack1_win=%d postpack2_limit=%d postpack2_win=%d postpack2_chunks=%d seed_mul=%d\n",
         gate_count, MAX_CUTS_PER_NODE, MAX_PAIRS_PER_NODE, MAX_DISJOINT_PAIRS_PER_NODE,
         LAYER_CUTS_PER_NODE, MAX_I5_CANDIDATES, MAPPING_ROUNDS, POSTPACK_PASS1_SCAN_WINDOW,
         POSTPACK_PASS2_MAX_SINGLE, POSTPACK_PASS2_SCAN_WINDOW, POSTPACK_PASS2_MAX_CHUNKS, PAIR_SEED_MULTIPLIER);
+    std::string mapping_rounds_text = mapping_rounds_override >= 1 ? std::to_string(mapping_rounds_override) : "auto";
+    std::string area_recovery_text = area_recovery_rounds_override >= 0 ? std::to_string(area_recovery_rounds_override) : "auto";
+    log("Experiment config: mode=%s postpack=%s disjoint_mode=%s adaptive_budget=%s mapping_rounds=%s area_recovery=%s\n",
+        CoveringModeOverrideName(covering_mode_override),
+        disable_postpack ? "off" : "on",
+        disable_disjoint_mode ? "off" : "on",
+        disable_adaptive_budget ? "off" : "on",
+        mapping_rounds_text.c_str(),
+        area_recovery_text.c_str());
     
     // ABC风格：初始化估计引用计数
     log("Initializing estimated reference counts (ABC-style)...\n");
+    PerformanceTimer init_refs_timer;
+    init_refs_timer.begin();
     cell2est_refs.clear();
     cell2refs.clear();
     for (Cell* node : gates) {
@@ -3006,9 +5035,12 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
         cell2est_refs[node] = max(1.0f, (float)fanout);
         cell2refs[node] = fanout;
     }
+    init_refs_sec = EndPhaseTimer(init_refs_timer, "initial ref estimation");
     
     // Phase 1: 为每个节点生成割集
     log("Phase 1: Generating cuts for all nodes...\n");
+    PerformanceTimer cut_generation_timer;
+    cut_generation_timer.begin();
 
     for (Cell* node : gates) {
         vector<Cut> cuts;
@@ -3036,24 +5068,30 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
                   cell->name.c_str(), log_signal(GetCellOutput(cell)),
                   cell2depth[cell], cell2cuts[cell].size());
     }
+    cut_generation_sec = EndPhaseTimer(cut_generation_timer, "cut generation");
 
     // Phase 2: 计算Arrival Time和Required Time（ABC风格）
     log("\nPhase 2: Computing arrival and required times (ABC-style)...\n");
+    PerformanceTimer timing_analysis_timer;
+    timing_analysis_timer.begin();
     ComputeArrivalTimes(gates);
     ComputeRequiredTimes(module, gates);
 
     // 使用当前best cut恢复引用计数，作为下一步area flow的基础
     log("\nPhase 2.25: Recomputing ref-counts from best cuts...\n");
     RecomputeRefsFromPOs(module, gates);
+    timing_analysis_sec = EndPhaseTimer(timing_analysis_timer, "arrival/required/refcount");
     
     // ABC风格：多轮迭代优化
     int mapping_rounds = MAPPING_ROUNDS;
     if ((int)gates.size() >= 900 && (int)gates.size() < EXTRA_MODE_GATE_LIMIT)
         mapping_rounds += 1;
     log("\nPhase 2.5: Multi-round mapping optimization (ABC-style, %d rounds)...\n", mapping_rounds);
+    PerformanceTimer mapping_rounds_timer;
+    mapping_rounds_timer.begin();
     for (int round = 1; round <= mapping_rounds; round++) {
         log("  Round %d: %s optimization...\n", round, round == 1 ? "delay" : "area");
-        size_t changed_nodes = 0;
+            size_t changed_nodes = 0;
 
         // 更新每个节点的best cut
         for (Cell* node : gates) {
@@ -3131,14 +5169,19 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
             break;
         }
     }
+    mapping_rounds_sec = EndPhaseTimer(mapping_rounds_timer, "multi-round mapping");
 
     // 末尾精确面积恢复：在轻度timing约束下，按ref/deref真实代价选择best cut。
     int final_area_rounds = FINAL_AREA_RECOVERY_ROUNDS;
     if (gate_count >= 50000)
         final_area_rounds = 1;
+    if (area_recovery_rounds_override >= 0)
+        final_area_rounds = area_recovery_rounds_override;
     if (final_area_rounds > 0)
         log("\nPhase 2.75: Exact area-recovery rounds (%d rounds)...\n", final_area_rounds);
 
+    PerformanceTimer area_recovery_timer;
+    area_recovery_timer.begin();
     for (int round = 1; round <= final_area_rounds; round++) {
         size_t changed_nodes = 0;
 
@@ -3164,6 +5207,7 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
             const Cut* best_cut = nullptr;
             int best_added = std::numeric_limits<int>::max();
             double best_flow = std::numeric_limits<double>::infinity();
+            double area_slack = PackableCutAreaSlack();
 
             for (auto& cut : cell2cuts[node]) {
                 float max_arr = 0.0f;
@@ -3185,15 +5229,26 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
                 bool better = false;
                 if (added < best_added)
                     better = true;
-                else if (added == best_added && mutable_cut.area_flow < best_flow - EPSILON)
+                else if (added == best_added && mutable_cut.area_flow < best_flow - area_slack)
                     better = true;
-                else if (added == best_added && fabs(mutable_cut.area_flow - best_flow) <= EPSILON &&
-                         best_cut && mutable_cut.leaves.size() > best_cut->leaves.size())
-                    better = true;
-                else if (added == best_added && fabs(mutable_cut.area_flow - best_flow) <= EPSILON &&
+                else if (added == best_added && best_cut && PreferPackableCutHeuristic() &&
+                         fabs(mutable_cut.area_flow - best_flow) <= area_slack) {
+                    int cand_pack = ComputeCutPackabilityScore(mutable_cut);
+                    int best_pack = ComputeCutPackabilityScore(*best_cut);
+                    if (cand_pack != best_pack)
+                        better = cand_pack > best_pack;
+                }
+                else if (added == best_added && fabs(mutable_cut.area_flow - best_flow) <= area_slack &&
+                         best_cut && mutable_cut.leaves.size() != best_cut->leaves.size())
+                    better = current_mapping_gate_count >= 5000
+                        ? mutable_cut.leaves.size() < best_cut->leaves.size()
+                        : mutable_cut.leaves.size() > best_cut->leaves.size();
+                else if (added == best_added && fabs(mutable_cut.area_flow - best_flow) <= area_slack &&
                          best_cut && mutable_cut.leaves.size() == best_cut->leaves.size() &&
-                         mutable_cut.depth > best_cut->depth)
-                    better = true;
+                         mutable_cut.depth != best_cut->depth)
+                    better = current_mapping_gate_count >= 5000
+                        ? mutable_cut.depth < best_cut->depth
+                        : mutable_cut.depth > best_cut->depth;
 
                 if (better) {
                     best_cut = &mutable_cut;
@@ -3221,6 +5276,7 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
         if (changed_nodes == 0)
             break;
     }
+    area_recovery_sec = EndPhaseTimer(area_recovery_timer, "exact area recovery");
 
     // Phase 3: bit-level随机仿真目前不参与映射决策，跳过以提升稳定性和速度
     log("\nPhase 3: Skipping non-decision bit-state simulation...\n");
@@ -3266,30 +5322,60 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     // Mode 1: 标准双输出覆盖
     if (run_layer_modes) {
         log("\n=== Covering Mode 1: Standard dual-enabled ===\n");
+        PerformanceTimer mode_timer;
+        mode_timer.begin();
         run_dual_covering_mode(lut_infos_dual_mode, single_luts_dual_mode);
+        mode1_sec = EndPhaseTimer(mode_timer, "covering mode1");
     } else {
         log("\n=== Covering Mode 1: skipped for very large network (%zu gates)\n", gates.size());
     }
 
     // Mode 2: 激进析取配对覆盖（仅中小规模网络）
     bool run_extra_modes = run_layer_modes && (gates.size() <= (size_t)EXTRA_MODE_GATE_LIMIT);
+    if (disable_disjoint_mode)
+        run_extra_modes = false;
     if (run_extra_modes) {
         log("\n=== Covering Mode 2: Disjoint-aggressive ===\n");
+        PerformanceTimer mode_timer;
+        mode_timer.begin();
         run_disjoint_aggressive_mode(lut_infos_disjoint_mode, single_luts_disjoint_mode);
+        mode2_sec = EndPhaseTimer(mode_timer, "covering mode2");
     }
 
     // Mode 3: 纯单输出覆盖
     log("\n=== Covering Mode 3: Best-cut single-output ===\n");
+    PerformanceTimer mode3_timer;
+    mode3_timer.begin();
     BuildBestCutSingleCover(gates, single_luts_bestcut_mode);
+    mode3_sec = EndPhaseTimer(mode3_timer, "covering mode3");
 
     // 对所有模式执行后处理打包
-    if (run_layer_modes)
-        PostPackSingleLUTs(lut_infos_dual_mode, single_luts_dual_mode);
-    if (run_extra_modes) {
-        PostPackSingleLUTs(lut_infos_disjoint_mode, single_luts_disjoint_mode);
-    }
     vector<LUT6DInfo> dual_from_bestcut;
-    PostPackSingleLUTs(dual_from_bestcut, single_luts_bestcut_mode);
+    PerformanceTimer postpack_timer;
+    postpack_timer.begin();
+    if (!disable_postpack) {
+        if (run_layer_modes)
+            PostPackSingleLUTs(lut_infos_dual_mode, single_luts_dual_mode);
+        if (run_extra_modes)
+            PostPackSingleLUTs(lut_infos_disjoint_mode, single_luts_disjoint_mode);
+        PostPackSingleLUTs(dual_from_bestcut, single_luts_bestcut_mode);
+    } else {
+        log("  Post-packing disabled by option.\n");
+    }
+    postpack_sec = EndPhaseTimer(postpack_timer, "post-pack stage");
+
+    PerformanceTimer repair_timer;
+    repair_timer.begin();
+    if (run_layer_modes) {
+        RepairAndRepackPlannedLUTs(module, lut_infos_dual_mode, single_luts_dual_mode, "standard-dual");
+    }
+    if (run_extra_modes) {
+        RepairAndRepackPlannedLUTs(module, lut_infos_disjoint_mode, single_luts_disjoint_mode, "disjoint-aggressive");
+    }
+    {
+        RepairAndRepackPlannedLUTs(module, dual_from_bestcut, single_luts_bestcut_mode, "bestcut-single");
+    }
+    repair_sec = EndPhaseTimer(repair_timer, "repair/repack stage");
 
     // 比较所有模式的总LUT数，选最优
     size_t total_mode1 = run_layer_modes
@@ -3300,29 +5386,54 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
         : SIZE_MAX;
     size_t total_mode3 = dual_from_bestcut.size() + single_luts_bestcut_mode.size();
 
-    size_t best_total = std::min({total_mode1, total_mode2, total_mode3});
+    size_t best_total = SIZE_MAX;
     const char* picked_name = "unknown";
 
-    if (best_total == total_mode1) {
+    if (covering_mode_override == CoveringModeOverride::STANDARD_DUAL) {
+        if (!run_layer_modes)
+            log_cmd_error("lut6d_map covering mode 'standard-dual' is unavailable for this design size.\n");
         lut_infos = std::move(lut_infos_dual_mode);
         single_luts = std::move(single_luts_dual_mode);
         picked_name = "standard-dual";
-    } else if (best_total == total_mode2) {
+        best_total = total_mode1;
+    } else if (covering_mode_override == CoveringModeOverride::DISJOINT_AGGRESSIVE) {
+        if (!run_extra_modes)
+            log_cmd_error("lut6d_map covering mode 'disjoint-aggressive' is unavailable for this design size or was disabled.\n");
         lut_infos = std::move(lut_infos_disjoint_mode);
         single_luts = std::move(single_luts_disjoint_mode);
         picked_name = "disjoint-aggressive";
-    } else {
+        best_total = total_mode2;
+    } else if (covering_mode_override == CoveringModeOverride::BESTCUT_SINGLE) {
         lut_infos = std::move(dual_from_bestcut);
         single_luts = std::move(single_luts_bestcut_mode);
-        picked_name = "bestcut-single+postpack";
+        picked_name = disable_postpack ? "bestcut-single" : "bestcut-single+postpack";
+        best_total = total_mode3;
+    } else {
+        best_total = std::min({total_mode1, total_mode2, total_mode3});
+        if (best_total == total_mode1) {
+            lut_infos = std::move(lut_infos_dual_mode);
+            single_luts = std::move(single_luts_dual_mode);
+            picked_name = "standard-dual";
+        } else if (best_total == total_mode2) {
+            lut_infos = std::move(lut_infos_disjoint_mode);
+            single_luts = std::move(single_luts_disjoint_mode);
+            picked_name = "disjoint-aggressive";
+        } else {
+            lut_infos = std::move(dual_from_bestcut);
+            single_luts = std::move(single_luts_bestcut_mode);
+            picked_name = disable_postpack ? "bestcut-single" : "bestcut-single+postpack";
+        }
     }
 
+    std::string mode2_text = run_extra_modes ? std::to_string(total_mode2) : "skipped";
     log("  Covering mode decision: mode1=%zu, mode2=%s, mode3=%zu, picked=%s (%zu LUTs)\n",
         total_mode1,
-        run_extra_modes ? std::to_string(total_mode2).c_str() : "skipped",
+        mode2_text.c_str(),
         total_mode3, picked_name, best_total);
     
     // 先添加所有LUT，再基于实际输出删除原节点
+    PerformanceTimer emit_timer;
+    emit_timer.begin();
     mapped_lut_outputs.clear();
     log("\nTotal LUT6D cells to be added: %zu\n", lut_infos.size());
     for (auto lut_info : lut_infos) {
@@ -3362,6 +5473,7 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     
     log("\nFinal: %zu LUT6D + %zu single LUT = %zu total LUTs\n", 
         lut_infos.size(), single_luts.size(), lut_infos.size() + single_luts.size());
+    emit_sec = EndPhaseTimer(emit_timer, "emit/remove stage");
 
     // 恢复全局预算，避免影响后续module。
     MAX_CUTS_PER_NODE = saved_max_cuts_per_node;
@@ -3375,6 +5487,12 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     POSTPACK_PASS2_SCAN_WINDOW = saved_postpack_pass2_scan_window;
     POSTPACK_PASS2_MAX_CHUNKS = saved_postpack_pass2_max_chunks;
     PAIR_SEED_MULTIPLIER = saved_pair_seed_multiplier;
+
+    mapping_total_timer.end();
+    log("Timing summary: init=%.3f cut=%.3f timing=%.3f rounds=%.3f area=%.3f mode1=%.3f mode2=%.3f mode3=%.3f postpack=%.3f repair=%.3f emit=%.3f total=%.3f s\n",
+        init_refs_sec, cut_generation_sec, timing_analysis_sec, mapping_rounds_sec,
+        area_recovery_sec, mode1_sec, mode2_sec, mode3_sec, postpack_sec,
+        repair_sec, emit_sec, mapping_total_timer.sec());
 }
 
 // 清理所有全局数据结构，释放内存
@@ -3426,12 +5544,90 @@ struct LUT6DMapPass : public Pass {
         log("\n");
         log("\tThis pass maps logic to LUT6D cells, which are 6-input LUTs with dual outputs.\n");
         log("\n");
+        log("\t    -covering-mode <auto|standard-dual|disjoint-aggressive|bestcut-single>\n");
+        log("\t        Control which covering result is emitted. Default: auto.\n");
+        log("\n");
+        log("\t    -single-only\n");
+        log("\t        Shorthand for '-covering-mode bestcut-single'.\n");
+        log("\n");
+        log("\t    -no-postpack\n");
+        log("\t        Disable the post-pack stage that merges single-output LUTs.\n");
+        log("\n");
+        log("\t    -no-disjoint-mode\n");
+        log("\t        Skip the disjoint-aggressive covering mode in auto selection.\n");
+        log("\n");
+        log("\t    -mapping-rounds <N>\n");
+        log("\t        Override the number of ABC-style mapping rounds.\n");
+        log("\n");
+        log("\t    -area-recovery-rounds <N>\n");
+        log("\t        Override the number of exact area-recovery rounds.\n");
+        log("\n");
+        log("\t    -no-adaptive-budget\n");
+        log("\t        Disable size-based runtime budget tuning for experiments.\n");
+        log("\n");
     }
     void execute(std::vector<std::string> args, RTLIL::Design *design) override
     {
         log_header(design, "Start MapperPass\n");
 
 		size_t argidx = 1;
+        auto saved_covering_mode_override = covering_mode_override;
+        bool saved_disable_postpack = disable_postpack;
+        bool saved_disable_disjoint_mode = disable_disjoint_mode;
+        bool saved_disable_adaptive_budget = disable_adaptive_budget;
+        int saved_mapping_rounds_override = mapping_rounds_override;
+        int saved_area_recovery_rounds_override = area_recovery_rounds_override;
+
+        covering_mode_override = CoveringModeOverride::AUTO;
+        disable_postpack = false;
+        disable_disjoint_mode = false;
+        disable_adaptive_budget = false;
+        mapping_rounds_override = -1;
+        area_recovery_rounds_override = -1;
+
+        while (argidx < args.size()) {
+            if (args[argidx] == "-covering-mode" && argidx + 1 < args.size()) {
+                if (!ParseCoveringModeOverride(args[argidx + 1], covering_mode_override))
+                    log_cmd_error("Unknown lut6d_map covering mode '%s'.\n", args[argidx + 1].c_str());
+                argidx += 2;
+                continue;
+            }
+            if (args[argidx] == "-single-only") {
+                covering_mode_override = CoveringModeOverride::BESTCUT_SINGLE;
+                argidx++;
+                continue;
+            }
+            if (args[argidx] == "-no-postpack") {
+                disable_postpack = true;
+                argidx++;
+                continue;
+            }
+            if (args[argidx] == "-no-disjoint-mode") {
+                disable_disjoint_mode = true;
+                argidx++;
+                continue;
+            }
+            if (args[argidx] == "-no-adaptive-budget") {
+                disable_adaptive_budget = true;
+                argidx++;
+                continue;
+            }
+            if (args[argidx] == "-mapping-rounds" && argidx + 1 < args.size()) {
+                mapping_rounds_override = ParseIntOption(args[argidx + 1], "-mapping-rounds");
+                if (mapping_rounds_override < 1)
+                    log_cmd_error("lut6d_map option -mapping-rounds expects N >= 1.\n");
+                argidx += 2;
+                continue;
+            }
+            if (args[argidx] == "-area-recovery-rounds" && argidx + 1 < args.size()) {
+                area_recovery_rounds_override = ParseIntOption(args[argidx + 1], "-area-recovery-rounds");
+                if (area_recovery_rounds_override < 0)
+                    log_cmd_error("lut6d_map option -area-recovery-rounds expects N >= 0.\n");
+                argidx += 2;
+                continue;
+            }
+            break;
+        }
 
 		extra_args(args, argidx, design);
 
@@ -3444,6 +5640,13 @@ struct LUT6DMapPass : public Pass {
             log_cmd_error("No top module found after ABC pre-mapping.\n");
 		log_header(design, "Continuing MapperPass pass.\n");
         LUT6DMapperMain(module);
+
+        covering_mode_override = saved_covering_mode_override;
+        disable_postpack = saved_disable_postpack;
+        disable_disjoint_mode = saved_disable_disjoint_mode;
+        disable_adaptive_budget = saved_disable_adaptive_budget;
+        mapping_rounds_override = saved_mapping_rounds_override;
+        area_recovery_rounds_override = saved_area_recovery_rounds_override;
 		log_pop();
     }
 } LUT6DMapPass;

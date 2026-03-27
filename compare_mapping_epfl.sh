@@ -10,8 +10,8 @@ set -e
 
 YOSYS="./yosys"
 ABC="./yosys-abc"
-AIG_INPUT_DIR="/Users/yoyowang/Desktop/benchmark"
-TEST_DIR="test_output_epfl"
+AIG_INPUT_DIR="./epfl_benchmark"
+TEST_DIR="test_output_epfl_reduced_level"
 ENFORCE_NOT_WORSE_THAN_ABC=1
 
 CUSTOM_AIG_DIR=""

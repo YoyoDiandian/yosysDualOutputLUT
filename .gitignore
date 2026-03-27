@@ -67,3 +67,4 @@ backup/
 .git-abc-submodule-hash
 pango*/
 backup/
+epfl_*/

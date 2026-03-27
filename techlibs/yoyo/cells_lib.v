@@ -86,6 +86,21 @@ module GTP_LUT6D
 )  ;
 endmodule
 
+module GTP_VERSAL_LUT6D
+#(
+    parameter [63:0] INIT = 64'h0000000000000000
+) (
+    output O6,
+    output O5,
+    input I0,
+    input I1,
+    input I2,
+    input I3,
+    input I4,
+    input I5
+)  ;
+endmodule
+
 module GTP_LUT5D
 #(
     parameter [31:0] INIT = 32'h00000000
