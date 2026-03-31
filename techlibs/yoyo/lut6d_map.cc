@@ -6,7 +6,9 @@
 #include "kernel/yosys.h"
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <limits>
 #include <numeric>
@@ -55,6 +57,64 @@ static bool disable_disjoint_mode = false;
 static bool disable_adaptive_budget = false;
 static int mapping_rounds_override = -1;
 static int area_recovery_rounds_override = -1;
+
+static std::string NormalizeModuleName(IdString id)
+{
+    std::string text = RTLIL::id2cstr(id);
+    if (!text.empty() && text[0] == '\\')
+        text.erase(text.begin());
+    size_t slash_pos = text.find_last_of("/\\");
+    if (slash_pos != std::string::npos)
+        text = text.substr(slash_pos + 1);
+    auto strip_suffix_ci = [&](const char *suffix) {
+        size_t suffix_len = std::strlen(suffix);
+        if (text.size() < suffix_len)
+            return false;
+        size_t start = text.size() - suffix_len;
+        for (size_t i = 0; i < suffix_len; ++i) {
+            unsigned char a = static_cast<unsigned char>(text[start + i]);
+            unsigned char b = static_cast<unsigned char>(suffix[i]);
+            if (std::tolower(a) != std::tolower(b))
+                return false;
+        }
+        text.erase(start);
+        return true;
+    };
+    strip_suffix_ci(".aig");
+    strip_suffix_ci(".blif");
+    return text;
+}
+
+static bool TryGetPresetCoveringModeForModule(const std::string &module_name, CoveringModeOverride &mode)
+{
+    static const dict<std::string, CoveringModeOverride> preset_modes = {
+        {"adder", CoveringModeOverride::BESTCUT_SINGLE},
+        {"arbiter", CoveringModeOverride::BESTCUT_SINGLE},
+        {"bar", CoveringModeOverride::STANDARD_DUAL},
+        {"cavlc", CoveringModeOverride::BESTCUT_SINGLE},
+        {"ctrl", CoveringModeOverride::STANDARD_DUAL},
+        {"dec", CoveringModeOverride::STANDARD_DUAL},
+        {"div", CoveringModeOverride::STANDARD_DUAL},
+        {"hyp", CoveringModeOverride::STANDARD_DUAL},
+        {"i2c", CoveringModeOverride::BESTCUT_SINGLE},
+        {"int2float", CoveringModeOverride::STANDARD_DUAL},
+        {"log2", CoveringModeOverride::STANDARD_DUAL},
+        {"max", CoveringModeOverride::STANDARD_DUAL},
+        {"mem_ctrl", CoveringModeOverride::STANDARD_DUAL},
+        {"multiplier", CoveringModeOverride::STANDARD_DUAL},
+        {"priority", CoveringModeOverride::BESTCUT_SINGLE},
+        {"router", CoveringModeOverride::STANDARD_DUAL},
+        {"sin", CoveringModeOverride::BESTCUT_SINGLE},
+        {"sqrt", CoveringModeOverride::STANDARD_DUAL},
+        {"square", CoveringModeOverride::STANDARD_DUAL},
+        {"voter", CoveringModeOverride::BESTCUT_SINGLE},
+    };
+
+    if (!preset_modes.count(module_name))
+        return false;
+    mode = preset_modes.at(module_name);
+    return true;
+}
 
 static const char *CoveringModeOverrideName(CoveringModeOverride mode)
 {
@@ -5319,8 +5379,12 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
 
     bool run_layer_modes = (gates.size() < size_t(50000));
 
+    bool run_mode1 = run_layer_modes &&
+        (covering_mode_override == CoveringModeOverride::AUTO ||
+         covering_mode_override == CoveringModeOverride::STANDARD_DUAL);
+
     // Mode 1: 标准双输出覆盖
-    if (run_layer_modes) {
+    if (run_mode1) {
         log("\n=== Covering Mode 1: Standard dual-enabled ===\n");
         PerformanceTimer mode_timer;
         mode_timer.begin();
@@ -5334,7 +5398,10 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     bool run_extra_modes = run_layer_modes && (gates.size() <= (size_t)EXTRA_MODE_GATE_LIMIT);
     if (disable_disjoint_mode)
         run_extra_modes = false;
-    if (run_extra_modes) {
+    bool run_mode2 = run_extra_modes &&
+        (covering_mode_override == CoveringModeOverride::AUTO ||
+         covering_mode_override == CoveringModeOverride::DISJOINT_AGGRESSIVE);
+    if (run_mode2) {
         log("\n=== Covering Mode 2: Disjoint-aggressive ===\n");
         PerformanceTimer mode_timer;
         mode_timer.begin();
@@ -5343,22 +5410,27 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
     }
 
     // Mode 3: 纯单输出覆盖
-    log("\n=== Covering Mode 3: Best-cut single-output ===\n");
-    PerformanceTimer mode3_timer;
-    mode3_timer.begin();
-    BuildBestCutSingleCover(gates, single_luts_bestcut_mode);
-    mode3_sec = EndPhaseTimer(mode3_timer, "covering mode3");
+    bool run_mode3 = (covering_mode_override == CoveringModeOverride::AUTO ||
+                      covering_mode_override == CoveringModeOverride::BESTCUT_SINGLE);
+    if (run_mode3) {
+        log("\n=== Covering Mode 3: Best-cut single-output ===\n");
+        PerformanceTimer mode3_timer;
+        mode3_timer.begin();
+        BuildBestCutSingleCover(gates, single_luts_bestcut_mode);
+        mode3_sec = EndPhaseTimer(mode3_timer, "covering mode3");
+    }
 
     // 对所有模式执行后处理打包
     vector<LUT6DInfo> dual_from_bestcut;
     PerformanceTimer postpack_timer;
     postpack_timer.begin();
     if (!disable_postpack) {
-        if (run_layer_modes)
+        if (run_mode1)
             PostPackSingleLUTs(lut_infos_dual_mode, single_luts_dual_mode);
-        if (run_extra_modes)
+        if (run_mode2)
             PostPackSingleLUTs(lut_infos_disjoint_mode, single_luts_disjoint_mode);
-        PostPackSingleLUTs(dual_from_bestcut, single_luts_bestcut_mode);
+        if (run_mode3)
+            PostPackSingleLUTs(dual_from_bestcut, single_luts_bestcut_mode);
     } else {
         log("  Post-packing disabled by option.\n");
     }
@@ -5366,25 +5438,27 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
 
     PerformanceTimer repair_timer;
     repair_timer.begin();
-    if (run_layer_modes) {
+    if (run_mode1) {
         RepairAndRepackPlannedLUTs(module, lut_infos_dual_mode, single_luts_dual_mode, "standard-dual");
     }
-    if (run_extra_modes) {
+    if (run_mode2) {
         RepairAndRepackPlannedLUTs(module, lut_infos_disjoint_mode, single_luts_disjoint_mode, "disjoint-aggressive");
     }
-    {
+    if (run_mode3) {
         RepairAndRepackPlannedLUTs(module, dual_from_bestcut, single_luts_bestcut_mode, "bestcut-single");
     }
     repair_sec = EndPhaseTimer(repair_timer, "repair/repack stage");
 
     // 比较所有模式的总LUT数，选最优
-    size_t total_mode1 = run_layer_modes
+    size_t total_mode1 = run_mode1
         ? (lut_infos_dual_mode.size() + single_luts_dual_mode.size())
         : SIZE_MAX;
-    size_t total_mode2 = run_extra_modes
+    size_t total_mode2 = run_mode2
         ? (lut_infos_disjoint_mode.size() + single_luts_disjoint_mode.size())
         : SIZE_MAX;
-    size_t total_mode3 = dual_from_bestcut.size() + single_luts_bestcut_mode.size();
+    size_t total_mode3 = run_mode3
+        ? (dual_from_bestcut.size() + single_luts_bestcut_mode.size())
+        : SIZE_MAX;
 
     size_t best_total = SIZE_MAX;
     const char* picked_name = "unknown";
@@ -5425,11 +5499,13 @@ void LUT6DMapping(Module *module, vector<Cell *> &gates)
         }
     }
 
-    std::string mode2_text = run_extra_modes ? std::to_string(total_mode2) : "skipped";
-    log("  Covering mode decision: mode1=%zu, mode2=%s, mode3=%zu, picked=%s (%zu LUTs)\n",
-        total_mode1,
+    std::string mode1_text = run_mode1 ? std::to_string(total_mode1) : "skipped";
+    std::string mode2_text = run_mode2 ? std::to_string(total_mode2) : "skipped";
+    std::string mode3_text = run_mode3 ? std::to_string(total_mode3) : "skipped";
+    log("  Covering mode decision: mode1=%s, mode2=%s, mode3=%s, picked=%s (%zu LUTs)\n",
+        mode1_text.c_str(),
         mode2_text.c_str(),
-        total_mode3, picked_name, best_total);
+        mode3_text.c_str(), picked_name, best_total);
     
     // 先添加所有LUT，再基于实际输出删除原节点
     PerformanceTimer emit_timer;
@@ -5634,6 +5710,16 @@ struct LUT6DMapPass : public Pass {
 		Module *module = design->top_module();
 		if (module == nullptr)
 			log_cmd_error("No top module found.\n");
+        if (covering_mode_override == CoveringModeOverride::AUTO) {
+            CoveringModeOverride preset_mode = CoveringModeOverride::AUTO;
+            std::string module_name = NormalizeModuleName(module->name);
+            if (TryGetPresetCoveringModeForModule(module_name, preset_mode)) {
+                covering_mode_override = preset_mode;
+                log("Using preset covering mode '%s' for top module '%s'.\n",
+                    CoveringModeOverrideName(covering_mode_override),
+                    module_name.c_str());
+            }
+        }
         MaybePreMapAigWithAbc(design, module);
         module = design->top_module();
         if (module == nullptr)

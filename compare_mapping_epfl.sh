@@ -11,7 +11,7 @@ set -e
 YOSYS="./yosys"
 ABC="./yosys-abc"
 AIG_INPUT_DIR="./epfl_benchmark"
-TEST_DIR="test_output_epfl_reduced_level"
+TEST_DIR="test_output_epfl_mode"
 ENFORCE_NOT_WORSE_THAN_ABC=1
 
 CUSTOM_AIG_DIR=""

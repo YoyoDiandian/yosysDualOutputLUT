@@ -34,11 +34,11 @@ Options:
   --help, -h                 Show this message.
 
 Built-in ablation preset:
-  full|<default>
+  auto|<default>
   no_postpack|-no-postpack
   no_disjoint|-no-disjoint-mode
   no_area_recovery|-mapping-rounds 1 -area-recovery-rounds 0
-  single_only|-covering-mode bestcut-single -no-postpack
+  bestcut_single_np|-covering-mode bestcut-single -no-postpack
 EOF
 }
 
@@ -88,13 +88,13 @@ done
 
 if [ $CONFIG_COUNT -eq 0 ]; then
     if [ $USE_ABLATION_PRESET -eq 1 ]; then
-        add_config "full" ""
+        add_config "auto" ""
         add_config "no_postpack" "-no-postpack"
         add_config "no_disjoint" "-no-disjoint-mode"
         add_config "no_area_recovery" "-mapping-rounds 1 -area-recovery-rounds 0"
-        add_config "single_only" "-covering-mode bestcut-single -no-postpack"
+        add_config "bestcut_single_np" "-covering-mode bestcut-single -no-postpack"
     else
-        add_config "full" ""
+        add_config "auto" ""
     fi
 fi
 
@@ -297,18 +297,80 @@ run_lut6d_config() {
     echo "$status,$lut_nodes,$total_luts,$total_dual,$num_lut6d,$num_lut6,$num_lut5d,$num_lut5,$num_lut4d,$num_lut4,$num_lut3,$num_lut2,-,OK"
 }
 
+run_abc_mapcore_yosys_time() {
+    local aig_file="$1"
+    local log_file="$2"
+    local runtime_file="$3"
+
+    local status=0
+    if timed_run "$runtime_file" "$log_file" "$YOSYS" -p "
+        read_aiger $aig_file
+        hierarchy -check -auto-top
+        proc; opt; techmap; opt;
+        abc -lut 6
+    "; then
+        status=0
+    else
+        status=$?
+    fi
+
+    if [ $status -ne 0 ]; then
+        echo "$status,"
+        return
+    fi
+
+    local runtime_s
+    runtime_s="$(tr -d '[:space:]' < "$runtime_file")"
+    echo "$status,${runtime_s:-0}"
+}
+
+run_ours_mapcore_yosys_time() {
+    local aig_file="$1"
+    local pass_args="$2"
+    local log_file="$3"
+    local runtime_file="$4"
+
+    local lut6d_cmd="lut6d_map"
+    if [ -n "$pass_args" ]; then
+        lut6d_cmd="$lut6d_cmd $pass_args"
+    fi
+
+    local status=0
+    if timed_run "$runtime_file" "$log_file" "$YOSYS" -p "
+        read_aiger $aig_file
+        hierarchy -check -auto-top
+        proc; opt; techmap; opt;
+        abc -lut 6
+        opt
+        $lut6d_cmd
+    "; then
+        status=0
+    else
+        status=$?
+    fi
+
+    if [ $status -ne 0 ]; then
+        echo "$status,"
+        return
+    fi
+
+    local runtime_s
+    runtime_s="$(tr -d '[:space:]' < "$runtime_file")"
+    echo "$status,${runtime_s:-0}"
+}
+
 LIST_FILE="$OUT_DIR/test_list.csv"
 SORTED_LIST="$OUT_DIR/test_list_sorted.csv"
 COMBINED_CSV="$OUT_DIR/all_results.csv"
 SUMMARY_CSV="$OUT_DIR/summary_by_config.csv"
 
-printf 'Config,Pass_Args,Benchmark,Size_Nodes,ABC_Nodes,ABC_Edges,ABC_Levels,ABC_Runtime_s,Ours_Nodes,Ours_Levels,Ours_Runtime_s,Picked_Mode,Total_LUTs,Total_Dual,LUT6D,LUT6,LUT5D,LUT5,LUT4D,LUT4,LUT3,LUT2,Status\n' >"$COMBINED_CSV"
+printf 'Config,Pass_Args,Benchmark,Size_Nodes,ABC_Nodes,ABC_Edges,ABC_Levels,ABC_Runtime_s,Ours_Nodes,Ours_Levels,Ours_Runtime_s,Picked_Mode,Total_LUTs,Total_Dual,LUT6D,LUT6,LUT5D,LUT5,LUT4D,LUT4,LUT3,LUT2,ABC_MapCore_Runtime_s,Ours_MapCore_Runtime_s,Status\n' >"$COMBINED_CSV"
 : >"$LIST_FILE"
 
 for ((idx = 0; idx < CONFIG_COUNT; idx++)); do
     cfg_dir="$OUT_DIR/${CONFIG_NAMES[$idx]}"
     mkdir -p "$cfg_dir"
-    printf 'Benchmark,Size_Nodes,ABC_Nodes,ABC_Edges,ABC_Levels,ABC_Runtime_s,Ours_Nodes,Ours_Levels,Ours_Runtime_s,Picked_Mode,Total_LUTs,Total_Dual,LUT6D,LUT6,LUT5D,LUT5,LUT4D,LUT4,LUT3,LUT2,Status\n' >"$cfg_dir/results.csv"
+    printf 'Benchmark,Size_Nodes,ABC_Nodes,ABC_Edges,ABC_Levels,ABC_Runtime_s,Ours_Nodes,Ours_Levels,Ours_Runtime_s,Picked_Mode,Total_LUTs,Total_Dual,LUT6D,LUT6,LUT5D,LUT5,LUT4D,LUT4,LUT3,LUT2,ABC_MapCore_Runtime_s,Ours_MapCore_Runtime_s,Status\n' >"$cfg_dir/results.csv"
 done
 
 shopt -s nullglob
@@ -347,6 +409,8 @@ while IFS=',' read -r size_nodes bench aig_path; do
     abc_v="$base_dir/${bench}_abc_mapped.v"
     abc_log="$base_dir/${bench}_abc.log"
     abc_time="$base_dir/${bench}_abc.time"
+    abc_mapcore_log="$base_dir/${bench}_abc_mapcore.log"
+    abc_mapcore_time="$base_dir/${bench}_abc_mapcore.time"
 
     abc_result="$(run_abc_baseline "$aig_path" "$abc_v" "$abc_log" "$abc_time")"
     abc_status="$(echo "$abc_result" | cut -d',' -f1)"
@@ -354,20 +418,26 @@ while IFS=',' read -r size_nodes bench aig_path; do
     abc_edges="$(echo "$abc_result" | cut -d',' -f3)"
     abc_levels="$(echo "$abc_result" | cut -d',' -f4)"
     abc_runtime="$(echo "$abc_result" | cut -d',' -f5)"
+    abc_mapcore_result="$(run_abc_mapcore_yosys_time "$aig_path" "$abc_mapcore_log" "$abc_mapcore_time")"
+    abc_mapcore_status="$(echo "$abc_mapcore_result" | cut -d',' -f1)"
+    abc_mapcore_runtime="$(echo "$abc_mapcore_result" | cut -d',' -f2)"
 
     if [ "$abc_status" -ne 0 ]; then
         echo "  ABC baseline failed, skipping benchmark."
         for ((idx = 0; idx < CONFIG_COUNT; idx++)); do
             cfg_dir="$OUT_DIR/${CONFIG_NAMES[$idx]}"
-            printf '%s,%s,FAILED_ABC,,,,,,,,,,,,,,,,,,\n' "$bench" "$size_nodes" >>"$cfg_dir/results.csv"
-            printf '%s,"%s",%s,%s,FAILED_ABC,,,,,,,,,,,,,,,,,,\n' \
+            printf '%s,%s,FAILED_ABC,,,,,,,,,,,,,,,,,,,,\n' "$bench" "$size_nodes" >>"$cfg_dir/results.csv"
+            printf '%s,"%s",%s,%s,FAILED_ABC,,,,,,,,,,,,,,,,,,,,\n' \
                 "${CONFIG_NAMES[$idx]}" "${CONFIG_ARGS[$idx]}" "$bench" "$size_nodes" >>"$COMBINED_CSV"
         done
         echo ""
         continue
     fi
 
-    echo "  ABC:  nodes=$abc_nodes levels=$abc_levels runtime=${abc_runtime}s"
+    if [ "$abc_mapcore_status" -ne 0 ]; then
+        abc_mapcore_runtime=""
+    fi
+    echo "  ABC:  nodes=$abc_nodes levels=$abc_levels runtime=${abc_runtime}s mapcore=${abc_mapcore_runtime:-NA}s"
 
     for ((idx = 0; idx < CONFIG_COUNT; idx++)); do
         cfg_name="${CONFIG_NAMES[$idx]}"
@@ -377,6 +447,8 @@ while IFS=',' read -r size_nodes bench aig_path; do
         ours_json="$cfg_dir/${bench}_mapped.json"
         ours_log="$cfg_dir/${bench}.log"
         ours_time="$cfg_dir/${bench}.time"
+        ours_mapcore_log="$cfg_dir/${bench}.mapcore.log"
+        ours_mapcore_time="$cfg_dir/${bench}.mapcore.time"
 
         echo "  [$cfg_name] lut6d_map ${cfg_args:-<default>}"
         ours_result="$(run_lut6d_config "$aig_path" "$cfg_args" "$ours_v" "$ours_json" "$ours_log" "$ours_time")"
@@ -397,8 +469,15 @@ while IFS=',' read -r size_nodes bench aig_path; do
 
         ours_levels=""
         ours_runtime=""
+        ours_mapcore_runtime=""
         picked_mode=""
         final_status="$status_text"
+
+        ours_mapcore_result="$(run_ours_mapcore_yosys_time "$aig_path" "$cfg_args" "$ours_mapcore_log" "$ours_mapcore_time")"
+        ours_mapcore_status="$(echo "$ours_mapcore_result" | cut -d',' -f1)"
+        if [ "$ours_mapcore_status" -eq 0 ]; then
+            ours_mapcore_runtime="$(echo "$ours_mapcore_result" | cut -d',' -f2)"
+        fi
 
         if [ "$ours_status_code" -eq 0 ] && [ "$status_text" = "OK" ]; then
             ours_runtime="$(tr -d '[:space:]' < "$ours_time")"
@@ -409,19 +488,19 @@ while IFS=',' read -r size_nodes bench aig_path; do
             fi
         fi
 
-        echo "    status=$final_status nodes=${ours_nodes:-NA} levels=${ours_levels:-NA} runtime=${ours_runtime:-NA}s picked=${picked_mode:-NA}"
+        echo "    status=$final_status nodes=${ours_nodes:-NA} levels=${ours_levels:-NA} runtime=${ours_runtime:-NA}s mapcore=${ours_mapcore_runtime:-NA}s picked=${picked_mode:-NA}"
 
-        printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
             "$bench" "$size_nodes" "$abc_nodes" "$abc_edges" "$abc_levels" "$abc_runtime" \
             "${ours_nodes:-}" "${ours_levels:-}" "${ours_runtime:-}" "${picked_mode:-}" \
             "$total_luts" "$total_dual" "$num_lut6d" "$num_lut6" "$num_lut5d" "$num_lut5" \
-            "$num_lut4d" "$num_lut4" "$num_lut3" "$num_lut2" "$final_status" >>"$cfg_dir/results.csv"
+            "$num_lut4d" "$num_lut4" "$num_lut3" "$num_lut2" "${abc_mapcore_runtime:-}" "${ours_mapcore_runtime:-}" "$final_status" >>"$cfg_dir/results.csv"
 
-        printf '%s,"%s",%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        printf '%s,"%s",%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
             "$cfg_name" "$cfg_args" "$bench" "$size_nodes" "$abc_nodes" "$abc_edges" "$abc_levels" "$abc_runtime" \
             "${ours_nodes:-}" "${ours_levels:-}" "${ours_runtime:-}" "${picked_mode:-}" \
             "$total_luts" "$total_dual" "$num_lut6d" "$num_lut6" "$num_lut5d" "$num_lut5" \
-            "$num_lut4d" "$num_lut4" "$num_lut3" "$num_lut2" "$final_status" >>"$COMBINED_CSV"
+            "$num_lut4d" "$num_lut4" "$num_lut3" "$num_lut2" "${abc_mapcore_runtime:-}" "${ours_mapcore_runtime:-}" "$final_status" >>"$COMBINED_CSV"
     done
     echo ""
 done <"$SORTED_LIST"
@@ -433,7 +512,7 @@ for ((idx = 0; idx < CONFIG_COUNT; idx++)); do
     summary_line="$(
         awk -F, '
             NR == 1 { next }
-            $21 == "OK" && $7 != "" && $8 != "" && $9 != "" {
+            $23 == "OK" && $7 != "" && $8 != "" && $9 != "" {
                 count++
                 sum_nodes += $7 + 0
                 sum_levels += $8 + 0
